@@ -8,8 +8,10 @@ fn main() {
     chunk.write_chunk(chunk::OpCode::Constant);
     println!(
         "head: {:?}, cap: {}, count: {}",
-        chunk.head(),
+        chunk[0],
         chunk.capacity(),
-        chunk.count()
-    )
+        chunk.len()
+    );
+    chunk.clear();
+    chunk.write_chunk(chunk::OpCode::Constant);
 }
