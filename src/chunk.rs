@@ -62,6 +62,10 @@ impl Drop for Chunk {
 impl Deref for Chunk {
     type Target = [OpCode];
     fn deref(&self) -> &[OpCode] {
+        // handle null pointer
+        if self.count == 0 {
+            return &[];
+        }
         // SAFETY:
         // properly aligned slice of memory is guaranteed by grow
         // count guarantees that there are valid OpCodes in all this memory
@@ -72,6 +76,10 @@ impl Deref for Chunk {
 
 impl DerefMut for Chunk {
     fn deref_mut(&mut self) -> &mut [OpCode] {
+        // handle null pointer
+        if self.count == 0 {
+            return &mut [];
+        }
         // SAFETY:
         // properly aligned slice of memory is guaranteed by grow
         // count guarantees that there are valid OpCodes in all this memory
