@@ -1,6 +1,6 @@
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, realloc, Layout},
-    ptr::{self, NonNull},
+    ptr::NonNull,
 };
 
 pub fn grow_capacity(capacity: usize) -> usize {

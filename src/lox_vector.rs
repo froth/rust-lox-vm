@@ -5,6 +5,10 @@ use std::{
 
 use crate::memory;
 
+/// Custom Vector type.
+/// In clox several special purpose dynamic arrays exist, I made on generic type as it is easy enough in Rust.
+/// I did not use `std::vec` because implementing the datastructures are part of the book
+/// and because the GC uses `crate::memory` to get information about memory consumption
 pub struct LoxVector<T> {
     count: usize,
     capacity: usize,
@@ -89,49 +93,49 @@ impl<T> DerefMut for LoxVector<T> {
 }
 
 #[cfg(test)]
-mod chunk_tests {
+mod tests {
     use crate::chunk::OpCode;
 
     use super::*;
 
     #[test]
     fn new_works() {
-        let chunk: LoxVector<usize> = LoxVector::new();
-        assert_eq!(chunk.capacity, 0);
-        assert_eq!(chunk.len(), 0);
+        let vec: LoxVector<usize> = LoxVector::new();
+        assert_eq!(vec.capacity, 0);
+        assert_eq!(vec.len(), 0);
     }
 
     #[test]
     fn write_chunk() {
-        let mut chunk = LoxVector::new();
-        chunk.push(OpCode::Return);
-        assert_eq!(chunk.capacity, 8);
-        assert_eq!(chunk.len(), 1);
-        assert_eq!(chunk[0], OpCode::Return)
+        let mut vec = LoxVector::new();
+        vec.push(OpCode::Return);
+        assert_eq!(vec.capacity, 8);
+        assert_eq!(vec.len(), 1);
+        assert_eq!(vec[0], OpCode::Return)
     }
 
     #[test]
     fn grow() {
-        let mut chunk = LoxVector::new();
-        chunk.push(OpCode::Return);
-        chunk.push(OpCode::Return);
-        chunk.push(OpCode::Return);
-        chunk.push(OpCode::Return);
-        chunk.push(OpCode::Return);
-        chunk.push(OpCode::Return);
-        chunk.push(OpCode::Return);
-        chunk.push(OpCode::Return);
-        chunk.push(OpCode::Constant);
-        assert_eq!(chunk.len(), 9);
-        assert_eq!(chunk[8], OpCode::Constant);
-        assert_eq!(chunk.capacity, 16);
+        let mut vec = LoxVector::new();
+        vec.push(OpCode::Return);
+        vec.push(OpCode::Return);
+        vec.push(OpCode::Return);
+        vec.push(OpCode::Return);
+        vec.push(OpCode::Return);
+        vec.push(OpCode::Return);
+        vec.push(OpCode::Return);
+        vec.push(OpCode::Return);
+        vec.push(OpCode::Constant);
+        assert_eq!(vec.len(), 9);
+        assert_eq!(vec[8], OpCode::Constant);
+        assert_eq!(vec.capacity, 16);
     }
 
     #[test]
     fn slices_work() {
-        let mut chunk = LoxVector::new();
-        chunk.push(OpCode::Return);
-        chunk[0] = OpCode::Constant;
-        assert_eq!(chunk[0], OpCode::Constant);
+        let mut vec = LoxVector::new();
+        vec.push(OpCode::Return);
+        vec[0] = OpCode::Constant;
+        assert_eq!(vec[0], OpCode::Constant);
     }
 }
