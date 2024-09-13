@@ -1,6 +1,6 @@
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, realloc, Layout},
-    ptr,
+    ptr::NonNull,
 };
 
 pub fn grow_capacity(capacity: usize) -> usize {
@@ -11,8 +11,8 @@ pub fn grow_capacity(capacity: usize) -> usize {
     }
 }
 
-pub fn reallocate<T>(pointer: *mut T, old_capacity: usize, new_capacity: usize) -> *mut T {
-    let old_ptr = pointer as *mut u8;
+pub fn reallocate<T>(pointer: NonNull<T>, old_capacity: usize, new_capacity: usize) -> NonNull<T> {
+    let old_ptr = pointer.as_ptr() as *mut u8;
     let new_layout = Layout::array::<T>(new_capacity).unwrap();
     assert!(
         new_layout.size() <= isize::MAX as usize,
@@ -25,7 +25,7 @@ pub fn reallocate<T>(pointer: *mut T, old_capacity: usize, new_capacity: usize) 
             // old_ptr is guaranteed to be allocated by the same allocator
             // layout is the same as when allocating due to the matches below
             unsafe { dealloc(old_ptr, Layout::array::<T>(old).unwrap()) }
-            return ptr::null_mut();
+            return NonNull::dangling();
         }
         (0, _new) => {
             // SAFETY:
@@ -41,10 +41,8 @@ pub fn reallocate<T>(pointer: *mut T, old_capacity: usize, new_capacity: usize) 
         }
     };
 
-    if new_ptr.is_null() {
-        // allocation failed, most likely out of memory
-        handle_alloc_error(new_layout)
-    } else {
-        new_ptr as *mut T
+    match NonNull::new(new_ptr as *mut T) {
+        Some(p) => p,
+        None => handle_alloc_error(new_layout),
     }
 }

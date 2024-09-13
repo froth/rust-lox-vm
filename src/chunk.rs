@@ -1,151 +1,88 @@
-use std::{
-    ops::{Deref, DerefMut},
-    ptr,
-};
-
-use crate::memory;
+use crate::{lox_vector::LoxVector, value::Value};
 
 #[derive(Debug, PartialEq)]
+#[repr(u8)]
 pub enum OpCode {
     Return,
     Constant,
 }
 
+#[derive(Debug)]
+pub struct BadOpCode;
+
+impl TryFrom<u8> for OpCode {
+    type Error = BadOpCode;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        const RETURN: u8 = OpCode::Return as u8;
+        const CONSTANT: u8 = OpCode::Constant as u8;
+        match value {
+            RETURN => Ok(OpCode::Return),
+            CONSTANT => Ok(OpCode::Constant),
+            _ => Err(BadOpCode),
+        }
+    }
+}
+
 pub struct Chunk {
-    count: usize,
-    capacity: usize,
-    code: *mut OpCode,
+    code: LoxVector<u8>,
+    constants: LoxVector<Value>,
 }
 
 impl Chunk {
     pub fn new() -> Self {
         Self {
-            code: ptr::null_mut(),
-            count: 0,
-            capacity: 0,
+            code: LoxVector::new(),
+            constants: LoxVector::new(),
         }
     }
 
-    fn grow(&mut self) {
-        let new_capacity = memory::grow_capacity(self.capacity);
-        self.code = memory::reallocate(self.code, self.capacity, new_capacity);
-        self.capacity = new_capacity;
+    pub fn write(&mut self, byte: u8) {
+        self.code.push(byte)
     }
 
-    pub fn write_chunk(&mut self, op_code: OpCode) {
-        if self.count == self.capacity {
-            self.grow()
+    pub fn write_op_code(&mut self, op_code: OpCode) {
+        self.code.push(op_code as u8)
+    }
+
+    pub fn add_constant(&mut self, value: Value) -> u8 {
+        self.constants.push(value);
+        (self.constants.len() - 1)
+            .try_into()
+            .expect("constant count overflows u8, not supported")
+    }
+
+    pub fn disassemble(&self, name: &str) {
+        eprintln!("== {} ==", name);
+        let mut iter = self.code.iter().enumerate();
+        while let Some((offset, byte_code)) = iter.next() {
+            eprint!("{:0>4} ", offset);
+            let instruction = OpCode::try_from(*byte_code).unwrap();
+            match instruction {
+                OpCode::Return => eprintln!("RETURN"),
+                OpCode::Constant => {
+                    let (_, const_index) =
+                        iter.next().expect("CONSTANT without following const index");
+                    let const_index: usize = (*const_index).into();
+                    let constant = self.constants[const_index];
+                    eprintln!("{:<16} {:<4} '{}'", "CONSTANT", const_index, constant)
+                }
+            }
         }
-        unsafe {
-            ptr::write(self.code.add(self.count), op_code);
-        }
-        self.count += 1;
-    }
-
-    pub fn clear(&mut self) {
-        self.code = memory::reallocate(self.code, self.capacity, 0);
-        self.capacity = 0;
-        self.count = 0;
-    }
-
-    pub fn capacity(&self) -> usize {
-        self.capacity
-    }
-}
-
-impl Drop for Chunk {
-    fn drop(&mut self) {
-        self.code = memory::reallocate(self.code, self.capacity, 0);
-    }
-}
-
-impl Deref for Chunk {
-    type Target = [OpCode];
-    fn deref(&self) -> &[OpCode] {
-        // handle null pointer
-        if self.count == 0 {
-            return &[];
-        }
-        // SAFETY:
-        // properly aligned slice of memory is guaranteed by grow
-        // count guarantees that there are valid OpCodes in all this memory
-        // mutation can only take place with properly annotated &mut
-        unsafe { std::slice::from_raw_parts(self.code, self.count) }
-    }
-}
-
-impl DerefMut for Chunk {
-    fn deref_mut(&mut self) -> &mut [OpCode] {
-        // handle null pointer
-        if self.count == 0 {
-            return &mut [];
-        }
-        // SAFETY:
-        // properly aligned slice of memory is guaranteed by grow
-        // count guarantees that there are valid OpCodes in all this memory
-        // mutation can only take place with properly annotated &mut
-        unsafe { std::slice::from_raw_parts_mut(self.code, self.count) }
     }
 }
 
 #[cfg(test)]
-mod chunk_tests {
-    use std::mem;
+mod tests {
 
     use super::*;
 
     #[test]
-    fn opcode_does_not_need_drop() {
-        assert!(!mem::needs_drop::<OpCode>());
-    }
-
-    #[test]
-    fn new_works() {
-        let chunk = Chunk::new();
-        assert_eq!(chunk.capacity(), 0);
-        assert_eq!(chunk.len(), 0);
-    }
-
-    #[test]
-    fn write_chunk() {
-        let mut chunk = Chunk::new();
-        chunk.write_chunk(OpCode::Return);
-        assert_eq!(chunk.capacity(), 8);
-        assert_eq!(chunk.len(), 1);
-        assert_eq!(chunk[0], OpCode::Return)
-    }
-
-    #[test]
-    fn grow() {
-        let mut chunk = Chunk::new();
-        chunk.write_chunk(OpCode::Return);
-        chunk.write_chunk(OpCode::Return);
-        chunk.write_chunk(OpCode::Return);
-        chunk.write_chunk(OpCode::Return);
-        chunk.write_chunk(OpCode::Return);
-        chunk.write_chunk(OpCode::Return);
-        chunk.write_chunk(OpCode::Return);
-        chunk.write_chunk(OpCode::Return);
-        chunk.write_chunk(OpCode::Constant);
-        assert_eq!(chunk.len(), 9);
-        assert_eq!(chunk[8], OpCode::Constant);
-        assert_eq!(chunk.capacity(), 16);
-    }
-
-    #[test]
-    fn clear() {
-        let mut chunk = Chunk::new();
-        chunk.write_chunk(OpCode::Return);
-        chunk.clear();
-        assert_eq!(chunk.len(), 0);
-        assert_eq!(chunk.capacity(), 0);
-    }
-
-    #[test]
-    fn slices_work() {
-        let mut chunk = Chunk::new();
-        chunk.write_chunk(OpCode::Return);
-        chunk[0] = OpCode::Constant;
-        assert_eq!(chunk[0], OpCode::Constant);
+    fn constant_index() {
+        let mut chunk: Chunk = Chunk::new();
+        let index = chunk.add_constant(12.1);
+        assert_eq!(index, 0);
+        let index = chunk.add_constant(12.1);
+        assert_eq!(index, 1)
     }
 }
