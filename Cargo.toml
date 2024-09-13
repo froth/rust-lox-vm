@@ -7,3 +7,4 @@ authors = ["Fred Roth"]
 description = "An interpreter for the Lox language (http://craftinginterpreters.com/)"
 
 [dependencies]
+miette = { version = "7.2.0", features = ["fancy"] }
