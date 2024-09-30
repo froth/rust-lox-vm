@@ -140,4 +140,16 @@ mod tests {
         let index = chunk.add_constant(12.1);
         assert_eq!(index, 1)
     }
+
+    #[test]
+    fn disassemble_constant() {
+        let mut chunk = Chunk::new();
+        let constant = chunk.add_constant(1.1);
+        let src = "1.1";
+        let src = NamedSource::new("src", src);
+        chunk.write_op_code(OpCode::Constant, SourceSpan::from((0, 3)));
+        chunk.write(constant, SourceSpan::from((0, 3)));
+        let res = chunk.disassemble_at(&src, 0);
+        assert_eq!(res, "0000    1 CONSTANT         0    '1.1'");
+    }
 }
