@@ -1,4 +1,5 @@
 use miette::{NamedSource, SourceCode, SourceSpan};
+use std::fmt::Write as _;
 
 use crate::{lox_vector::LoxVector, value::Value};
 
@@ -57,30 +58,72 @@ impl Chunk {
             .expect("constant count overflows u8, not supported")
     }
 
-    pub fn disassemble<T: miette::SourceCode>(&self, source: NamedSource<T>) {
+    pub fn disassemble<T: SourceCode>(&self, source: &NamedSource<T>) {
         eprintln!("== {} ==", source.name());
         let mut iter = self.code.iter().zip(self.spans.iter()).enumerate();
         let mut last_line_number = None;
-        while let Some((offset, (byte_code, span))) = iter.next() {
-            eprint!("{:0>4} ", offset);
-            let line_number = source.read_span(span, 0, 0).unwrap().line();
-            if last_line_number.is_some_and(|l| l == line_number) {
-                eprint!("   | ");
-            } else {
-                eprint!("{:>4} ", line_number + 1);
-                last_line_number = Some(line_number);
+        while let Some((disassembled, line_number)) =
+            self.disassemble_next(&mut iter, source, last_line_number)
+        {
+            eprintln!("{disassembled}");
+            last_line_number = Some(line_number);
+        }
+    }
+
+    pub fn disassemble_at<T: SourceCode>(&self, source: &NamedSource<T>, at: usize) -> String {
+        let mut iter = self.code.iter().zip(self.spans.iter()).enumerate();
+        if at == 0 {
+            let (result, _) = self
+                .disassemble_next(&mut iter, source, None)
+                .expect("disassambling unknown index");
+            result
+        } else {
+            let mut skiped_iter = iter.skip(at - 1);
+            let (_, (_, span)) = skiped_iter.next().expect("disassembling unknown index");
+            let last_line_number = source.read_span(span, 0, 0).unwrap().line();
+            let (result, _) = self
+                .disassemble_next(&mut skiped_iter, source, Some(last_line_number))
+                .expect("disassambling unknown index");
+            result
+        }
+    }
+
+    fn disassemble_next<'a, T: SourceCode>(
+        &self,
+        iter: &mut impl Iterator<Item = (usize, (&'a u8, &'a SourceSpan))>,
+        source: &NamedSource<T>,
+        last_line_number: Option<usize>,
+    ) -> Option<(String, usize)> {
+        let mut result = String::new();
+        let (offset, (byte_code, span)) = iter.next()?;
+        let line_number = source.read_span(span, 0, 0).unwrap().line();
+
+        let _ = write!(&mut result, "{offset:0>4} ");
+
+        if last_line_number.is_some_and(|l| l == line_number) {
+            let _ = write!(&mut result, "   | ");
+        } else {
+            let _ = write!(&mut result, "{:>4} ", line_number + 1);
+        }
+
+        let instruction =
+            OpCode::try_from(*byte_code).unwrap_or_else(|_| panic!("Unknown OpCode {}", byte_code));
+        match instruction {
+            OpCode::Return => {
+                let _ = write!(&mut result, "RETURN");
             }
-            let instruction = OpCode::try_from(*byte_code).unwrap();
-            match instruction {
-                OpCode::Return => eprintln!("RETURN"),
-                OpCode::Constant => {
-                    let (_, (const_index, _)) = iter.next().expect("CONSTANT without const index");
-                    let const_index: usize = (*const_index).into();
-                    let constant = self.constants[const_index];
-                    eprintln!("{:<16} {:<4} '{}'", "CONSTANT", const_index, constant)
-                }
+            OpCode::Constant => {
+                let (_, (const_index, _)) = iter.next().expect("CONSTANT without const index");
+                let const_index: usize = (*const_index).into();
+                let constant = self.constants[const_index];
+                let _ = write!(
+                    &mut result,
+                    "{:<16} {:<4} '{}'",
+                    "CONSTANT", const_index, constant
+                );
             }
         }
+        Some((result, line_number))
     }
 }
 

@@ -6,7 +6,7 @@ use std::{
 use crate::memory;
 
 /// Custom Vector type.
-/// In clox several special purpose dynamic arrays exist, I made on generic type as it is easy enough in Rust.
+/// In clox several special purpose dynamic arrays exist, I made a generic type as it is easy enough in Rust.
 /// I did not use `std::vec` because implementing the datastructures are part of the book
 /// and because the GC uses `crate::memory` to get information about memory consumption
 pub struct LoxVector<T> {
