@@ -1,11 +1,19 @@
 use chunk::Chunk;
 use miette::{NamedSource, SourceSpan};
+use tracing::{debug, Level};
+use tracing_subscriber::FmtSubscriber;
 
 mod chunk;
 mod lox_vector;
 mod memory;
 mod value;
 fn main() {
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::TRACE)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
     let src = "return 1.1;
 return 1.1;
 return;
@@ -28,7 +36,7 @@ return;
     chunk.write_op_code(chunk::OpCode::Return, SourceSpan::from((24, 6)));
     chunk.disassemble(&src);
 
-    println!("{}", chunk.disassemble_at(&src, 0));
-    println!("{}", chunk.disassemble_at(&src, 1));
-    println!("{}", chunk.disassemble_at(&src, 3));
+    debug!("{}", chunk.disassemble_at(&src, 0));
+    debug!("{}", chunk.disassemble_at(&src, 1));
+    debug!("{}", chunk.disassemble_at(&src, 3));
 }
