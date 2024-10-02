@@ -8,5 +8,6 @@ description = "An interpreter for the Lox language (http://craftinginterpreters.
 
 [dependencies]
 miette = { version = "7.2.0", features = ["fancy"] }
+thiserror = "1.0.64"
 tracing = { version = "0.1.40", features = ["max_level_debug", "release_max_level_info"]}
 tracing-subscriber = "0.3.18"
