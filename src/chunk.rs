@@ -5,8 +5,8 @@ use crate::{lox_vector::LoxVector, op::Op, value::Value};
 
 pub struct Chunk {
     // in original clox this is Vector<u8> this is more wasteful but way easier. Maybe benchmark in the future?
-    code: LoxVector<Op>,
-    constants: LoxVector<Value>,
+    pub code: LoxVector<Op>,
+    pub constants: LoxVector<Value>,
     spans: LoxVector<SourceSpan>,
 }
 
