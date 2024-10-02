@@ -94,7 +94,7 @@ impl<T> DerefMut for LoxVector<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::chunk::OpCode;
+    use crate::op::Op;
 
     use super::*;
 
@@ -108,34 +108,34 @@ mod tests {
     #[test]
     fn write_chunk() {
         let mut vec = LoxVector::new();
-        vec.push(OpCode::Return);
+        vec.push(Op::Return);
         assert_eq!(vec.capacity, 8);
         assert_eq!(vec.len(), 1);
-        assert_eq!(vec[0], OpCode::Return)
+        assert_eq!(vec[0], Op::Return)
     }
 
     #[test]
     fn grow() {
         let mut vec = LoxVector::new();
-        vec.push(OpCode::Return);
-        vec.push(OpCode::Return);
-        vec.push(OpCode::Return);
-        vec.push(OpCode::Return);
-        vec.push(OpCode::Return);
-        vec.push(OpCode::Return);
-        vec.push(OpCode::Return);
-        vec.push(OpCode::Return);
-        vec.push(OpCode::Constant);
+        vec.push(Op::Return);
+        vec.push(Op::Return);
+        vec.push(Op::Return);
+        vec.push(Op::Return);
+        vec.push(Op::Return);
+        vec.push(Op::Return);
+        vec.push(Op::Return);
+        vec.push(Op::Return);
+        vec.push(Op::Constant(1));
         assert_eq!(vec.len(), 9);
-        assert_eq!(vec[8], OpCode::Constant);
+        assert_eq!(vec[8], Op::Constant(1));
         assert_eq!(vec.capacity, 16);
     }
 
     #[test]
     fn slices_work() {
         let mut vec = LoxVector::new();
-        vec.push(OpCode::Return);
-        vec[0] = OpCode::Constant;
-        assert_eq!(vec[0], OpCode::Constant);
+        vec.push(Op::Return);
+        vec[0] = Op::Constant(1);
+        assert_eq!(vec[0], Op::Constant(1));
     }
 }

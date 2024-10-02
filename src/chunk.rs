@@ -1,34 +1,11 @@
 use miette::{NamedSource, SourceCode, SourceSpan};
 use std::fmt::Write as _;
 
-use crate::{lox_vector::LoxVector, value::Value};
-
-#[derive(Debug, PartialEq)]
-#[repr(u8)]
-pub enum OpCode {
-    Return,
-    Constant,
-}
-
-#[derive(Debug)]
-pub struct BadOpCode;
-
-impl TryFrom<u8> for OpCode {
-    type Error = BadOpCode;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        const RETURN: u8 = OpCode::Return as u8;
-        const CONSTANT: u8 = OpCode::Constant as u8;
-        match value {
-            RETURN => Ok(OpCode::Return),
-            CONSTANT => Ok(OpCode::Constant),
-            _ => Err(BadOpCode),
-        }
-    }
-}
+use crate::{lox_vector::LoxVector, op::Op, value::Value};
 
 pub struct Chunk {
-    code: LoxVector<u8>,
+    // in original clox this is Vector<u8> this is more wasteful but way easier. Maybe benchmark in the future?
+    code: LoxVector<Op>,
     constants: LoxVector<Value>,
     spans: LoxVector<SourceSpan>,
 }
@@ -42,13 +19,9 @@ impl Chunk {
         }
     }
 
-    pub fn write(&mut self, byte: u8, span: SourceSpan) {
-        self.code.push(byte);
+    pub fn write(&mut self, op: Op, span: SourceSpan) {
+        self.code.push(op);
         self.spans.push(span);
-    }
-
-    pub fn write_op_code(&mut self, op_code: OpCode, span: SourceSpan) {
-        self.write(op_code as u8, span);
     }
 
     pub fn add_constant(&mut self, value: Value) -> u8 {
@@ -60,11 +33,12 @@ impl Chunk {
 
     pub fn disassemble<T: SourceCode>(&self, source: &NamedSource<T>) {
         eprintln!("== {} ==", source.name());
-        let mut iter = self.code.iter().zip(self.spans.iter()).enumerate();
+        let iter = self.code.iter().zip(self.spans.iter()).enumerate();
         let mut last_line_number = None;
-        while let Some((disassembled, line_number)) =
-            self.disassemble_next(&mut iter, source, last_line_number)
-        {
+
+        for (offset, (op, span)) in iter {
+            let (disassembled, line_number) =
+                self.to_disassembled(offset, op, span, source, last_line_number);
             eprintln!("{disassembled}");
             last_line_number = Some(line_number);
         }
@@ -73,29 +47,34 @@ impl Chunk {
     pub fn disassemble_at<T: SourceCode>(&self, source: &NamedSource<T>, at: usize) -> String {
         let mut iter = self.code.iter().zip(self.spans.iter()).enumerate();
         if at == 0 {
-            let (result, _) = self
-                .disassemble_next(&mut iter, source, None)
-                .expect("disassambling unknown index");
-            result
+            let (offset, (op, span)) = iter.next().expect("trying to disassemble empty chunk");
+            let (disassembled, _) = self.to_disassembled(offset, op, span, source, None);
+            disassembled
         } else {
             let mut skiped_iter = iter.skip(at - 1);
             let (_, (_, span)) = skiped_iter.next().expect("disassembling unknown index");
             let last_line_number = source.read_span(span, 0, 0).unwrap().line();
-            let (result, _) = self
-                .disassemble_next(&mut skiped_iter, source, Some(last_line_number))
-                .expect("disassambling unknown index");
-            result
+            let (offset, (op, span)) = skiped_iter
+                .next()
+                .expect("trying to disassemble empty chunk");
+            let (disassembled, _) =
+                self.to_disassembled(offset, op, span, source, Some(last_line_number));
+            disassembled
         }
     }
 
-    fn disassemble_next<'a, T: SourceCode>(
+    fn to_disassembled<T>(
         &self,
-        iter: &mut impl Iterator<Item = (usize, (&'a u8, &'a SourceSpan))>,
+        offset: usize,
+        op: &Op,
+        span: &SourceSpan,
         source: &NamedSource<T>,
         last_line_number: Option<usize>,
-    ) -> Option<(String, usize)> {
+    ) -> (String, usize)
+    where
+        T: SourceCode,
+    {
         let mut result = String::new();
-        let (offset, (byte_code, span)) = iter.next()?;
         let line_number = source.read_span(span, 0, 0).unwrap().line();
 
         let _ = write!(&mut result, "{offset:0>4} ");
@@ -106,14 +85,11 @@ impl Chunk {
             let _ = write!(&mut result, "{:>4} ", line_number + 1);
         }
 
-        let instruction =
-            OpCode::try_from(*byte_code).unwrap_or_else(|_| panic!("Unknown OpCode {}", byte_code));
-        match instruction {
-            OpCode::Return => {
+        match op {
+            Op::Return => {
                 let _ = write!(&mut result, "RETURN");
             }
-            OpCode::Constant => {
-                let (_, (const_index, _)) = iter.next().expect("CONSTANT without const index");
+            Op::Constant(const_index) => {
                 let const_index: usize = (*const_index).into();
                 let constant = self.constants[const_index];
                 let _ = write!(
@@ -123,7 +99,7 @@ impl Chunk {
                 );
             }
         }
-        Some((result, line_number))
+        (result, line_number)
     }
 }
 
@@ -147,8 +123,7 @@ mod tests {
         let constant = chunk.add_constant(1.1);
         let src = "1.1";
         let src = NamedSource::new("src", src);
-        chunk.write_op_code(OpCode::Constant, SourceSpan::from((0, 3)));
-        chunk.write(constant, SourceSpan::from((0, 3)));
+        chunk.write(Op::Constant(constant), SourceSpan::from((0, 3)));
         let res = chunk.disassemble_at(&src, 0);
         assert_eq!(res, "0000    1 CONSTANT         0    '1.1'");
     }
