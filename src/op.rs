@@ -2,4 +2,5 @@
 pub enum Op {
     Return,
     Constant(u8),
+    Negate,
 }

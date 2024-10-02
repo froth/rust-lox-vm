@@ -23,12 +23,9 @@ pub struct VM {
 
 impl VM {
     pub fn new() -> Self {
-        let mut vm = Self {
-            stack: Box::new([0.0; STACK_SIZE]),
-            stack_top: ptr::null_mut(),
-        };
-        vm.stack_top = vm.stack.as_mut_ptr();
-        vm
+        let mut stack = Box::new([0.0; STACK_SIZE]);
+        let stack_top = stack.as_mut_ptr();
+        Self { stack, stack_top }
     }
 
     pub fn interpret<T: miette::SourceCode>(
@@ -47,6 +44,10 @@ impl VM {
                 Op::Constant(index) => {
                     let constant = chunk.constants[*index as usize];
                     self.push(constant);
+                }
+                Op::Negate => {
+                    let old = self.pop();
+                    self.push(-old)
                 }
             }
         }

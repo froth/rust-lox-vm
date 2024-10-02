@@ -1,5 +1,5 @@
 use miette::{NamedSource, SourceCode, SourceSpan};
-use std::fmt::Write as _;
+use std::fmt::{self, Error, Write as _};
 
 use crate::{lox_vector::LoxVector, op::Op, value::Value};
 
@@ -37,8 +37,9 @@ impl Chunk {
         let mut last_line_number = None;
 
         for (offset, (op, span)) in iter {
-            let (disassembled, line_number) =
-                self.to_disassembled(offset, op, span, source, last_line_number);
+            let (disassembled, line_number) = self
+                .to_disassembled(offset, op, span, source, last_line_number)
+                .expect("writing to String can't fail");
             eprintln!("{disassembled}");
             last_line_number = Some(line_number);
         }
@@ -48,7 +49,9 @@ impl Chunk {
         let mut iter = self.code.iter().zip(self.spans.iter()).enumerate();
         if at == 0 {
             let (offset, (op, span)) = iter.next().expect("trying to disassemble empty chunk");
-            let (disassembled, _) = self.to_disassembled(offset, op, span, source, None);
+            let (disassembled, _) = self
+                .to_disassembled(offset, op, span, source, None)
+                .expect("writing to string can't fail");
             disassembled
         } else {
             let mut skiped_iter = iter.skip(at - 1);
@@ -57,8 +60,9 @@ impl Chunk {
             let (offset, (op, span)) = skiped_iter
                 .next()
                 .expect("trying to disassemble empty chunk");
-            let (disassembled, _) =
-                self.to_disassembled(offset, op, span, source, Some(last_line_number));
+            let (disassembled, _) = self
+                .to_disassembled(offset, op, span, source, Some(last_line_number))
+                .expect("writing to string can't fail");
             disassembled
         }
     }
@@ -70,36 +74,39 @@ impl Chunk {
         span: &SourceSpan,
         source: &NamedSource<T>,
         last_line_number: Option<usize>,
-    ) -> (String, usize)
+    ) -> Result<(String, usize), Error>
     where
         T: SourceCode,
     {
         let mut result = String::new();
         let line_number = source.read_span(span, 0, 0).unwrap().line();
 
-        let _ = write!(&mut result, "{offset:0>4} ");
+        write!(&mut result, "{offset:0>4} ")?;
 
         if last_line_number.is_some_and(|l| l == line_number) {
-            let _ = write!(&mut result, "   | ");
+            write!(&mut result, "   | ")?;
         } else {
-            let _ = write!(&mut result, "{:>4} ", line_number + 1);
+            write!(&mut result, "{:>4} ", line_number + 1)?;
         }
 
         match op {
             Op::Return => {
-                let _ = write!(&mut result, "RETURN");
+                write!(&mut result, "RETURN")?;
             }
             Op::Constant(const_index) => {
                 let const_index: usize = (*const_index).into();
                 let constant = self.constants[const_index];
-                let _ = write!(
+                write!(
                     &mut result,
                     "{:<16} {:<4} '{}'",
                     "CONSTANT", const_index, constant
-                );
+                )?;
+            }
+            Op::Negate => {
+                write!(&mut result, "NEGATE")?;
             }
         }
-        (result, line_number)
+        Ok((result, line_number))
     }
 }
 
