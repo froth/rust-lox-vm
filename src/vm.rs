@@ -1,8 +1,10 @@
+use std::{fmt::Write as _, ptr};
+
 use miette::{Diagnostic, NamedSource, Result};
 use thiserror::Error;
 use tracing::debug;
 
-use crate::{chunk::Chunk, op::Op};
+use crate::{chunk::Chunk, op::Op, value::Value};
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum InterpreterError {
@@ -12,24 +14,68 @@ pub enum InterpreterError {
     RuntimeError,
 }
 
-pub struct VM;
+const STACK_SIZE: usize = 256;
+
+pub struct VM {
+    stack: Box<[Value; STACK_SIZE]>,
+    stack_top: *mut Value,
+}
 
 impl VM {
+    pub fn new() -> Self {
+        let mut vm = Self {
+            stack: Box::new([0.0; STACK_SIZE]),
+            stack_top: ptr::null_mut(),
+        };
+        vm.stack_top = vm.stack.as_mut_ptr();
+        vm
+    }
+
     pub fn interpret<T: miette::SourceCode>(
-        &self,
+        &mut self,
         chunk: Chunk,
         source: &NamedSource<T>,
     ) -> Result<()> {
         for (i, op) in chunk.code.iter().enumerate() {
             debug!("{}", chunk.disassemble_at(source, i));
+            debug!("          {}", self.trace_stack());
             match op {
-                Op::Return => return Ok(()),
+                Op::Return => {
+                    println!("{}", self.pop());
+                    return Ok(());
+                }
                 Op::Constant(index) => {
                     let constant = chunk.constants[*index as usize];
-                    println!("{constant}")
+                    self.push(constant);
                 }
             }
         }
         Err(InterpreterError::RuntimeError.into())
+    }
+
+    fn push(&mut self, value: Value) {
+        // SAFETY: we have mut access to self and therefore to the stack
+        unsafe { *self.stack_top = value };
+        // SAFETY: NOT SAFE, stack could overflow
+        unsafe { self.stack_top = self.stack_top.add(1) };
+    }
+
+    fn pop(&mut self) -> Value {
+        // SAFETY: NOT SAFE, stack could overflow and underflow
+        unsafe {
+            self.stack_top = self.stack_top.sub(1);
+            *self.stack_top
+        }
+    }
+
+    fn trace_stack(&self) -> String {
+        let mut res = String::new();
+        let mut current = self.stack.as_ptr();
+        while current != self.stack_top {
+            let value = unsafe { *current };
+            write!(&mut res, "[ {} ]", value).unwrap();
+            unsafe { current = current.add(1) };
+        }
+        res
     }
 }

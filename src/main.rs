@@ -24,8 +24,12 @@ fn main() -> Result<()> {
     let mut chunk = Chunk::new();
     let constant = chunk.add_constant(1.1);
     chunk.write(Op::Constant(constant), SourceSpan::from((0, 3)));
+    chunk.write(Op::Constant(constant), SourceSpan::from((0, 3)));
+    chunk.write(Op::Constant(constant), SourceSpan::from((0, 3)));
+    chunk.write(Op::Constant(constant), SourceSpan::from((0, 3)));
+    chunk.write(Op::Constant(constant), SourceSpan::from((0, 3)));
     chunk.write(Op::Return, SourceSpan::from((5, 6)));
     chunk.disassemble(&src);
-    let vm = VM {};
+    let mut vm = VM::new();
     vm.interpret(chunk, &src)
 }
