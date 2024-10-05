@@ -1,4 +1,4 @@
-use std::{fmt::Write as _, ptr};
+use std::fmt::Write as _;
 
 use miette::{Diagnostic, NamedSource, Result};
 use thiserror::Error;
@@ -19,6 +19,16 @@ const STACK_SIZE: usize = 256;
 pub struct VM {
     stack: Box<[Value; STACK_SIZE]>,
     stack_top: *mut Value,
+}
+
+macro_rules! binary_operator {
+    ($self: ident, $op:tt) => {
+        {
+            let b = $self.pop();
+            let a = $self.pop();
+            $self.push(b $op a);
+        }
+    };
 }
 
 impl VM {
@@ -49,6 +59,10 @@ impl VM {
                     let old = self.pop();
                     self.push(-old)
                 }
+                Op::Add => binary_operator!(self, +),
+                Op::Subtract => binary_operator!(self, -),
+                Op::Multiply => binary_operator!(self, *),
+                Op::Divide => binary_operator!(self, /),
             }
         }
         Err(InterpreterError::RuntimeError.into())

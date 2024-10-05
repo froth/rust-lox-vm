@@ -2,5 +2,9 @@
 pub enum Op {
     Return,
     Constant(u8),
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
     Negate,
 }
