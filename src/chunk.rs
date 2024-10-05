@@ -1,5 +1,5 @@
 use miette::{NamedSource, SourceCode, SourceSpan};
-use std::fmt::{self, Error, Write as _};
+use std::fmt::{Error, Write as _};
 
 use crate::{lox_vector::LoxVector, op::Op, value::Value};
 
@@ -90,9 +90,7 @@ impl Chunk {
         }
 
         match op {
-            Op::Return => {
-                write!(&mut result, "RETURN")?;
-            }
+            Op::Return => write!(&mut result, "RETURN")?,
             Op::Constant(const_index) => {
                 let const_index: usize = (*const_index).into();
                 let constant = self.constants[const_index];
@@ -102,9 +100,11 @@ impl Chunk {
                     "CONSTANT", const_index, constant
                 )?;
             }
-            Op::Negate => {
-                write!(&mut result, "NEGATE")?;
-            }
+            Op::Negate => write!(&mut result, "NEGATE")?,
+            Op::Add => write!(&mut result, "ADD")?,
+            Op::Subtract => write!(&mut result, "SUBTRACT")?,
+            Op::Multiply => write!(&mut result, "MULTIPLY")?,
+            Op::Divide => write!(&mut result, "DIVIDE")?,
         }
         Ok((result, line_number))
     }

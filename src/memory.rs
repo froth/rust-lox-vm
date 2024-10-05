@@ -32,12 +32,12 @@ pub fn reallocate<T>(pointer: NonNull<T>, old_capacity: usize, new_capacity: usi
             // layout has guaranteed non-zero size as 0 size new has been matched above
             unsafe { alloc(new_layout) }
         }
-        (old, new) => {
+        (old, _) => {
             // SAFETY:
             // old_ptr is guaranteed to be allocated by the same allocator
             // layout is the same as when allocating due to the matches below and therefore also not 0 sized
             // new_size does not overflow isize max (assert above)
-            unsafe { realloc(old_ptr, Layout::array::<T>(old).unwrap(), new) }
+            unsafe { realloc(old_ptr, Layout::array::<T>(old).unwrap(), new_layout.size()) }
         }
     };
 
