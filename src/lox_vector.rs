@@ -130,6 +130,16 @@ mod tests {
         assert_eq!(vec[8], Op::Constant(1));
         assert_eq!(vec.capacity, 16);
     }
+    #[test]
+    fn grow_to_2049() {
+        let mut vec = LoxVector::new();
+        for _ in 0..2049 {
+            vec.push(Op::Return);
+        }
+        assert_eq!(vec.len(), 2049);
+        assert_eq!(vec[2048], Op::Return);
+        assert_eq!(vec.capacity, 4096);
+    }
 
     #[test]
     fn slices_work() {
