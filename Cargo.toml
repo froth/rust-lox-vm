@@ -7,7 +7,14 @@ authors = ["Fred Roth"]
 description = "An interpreter for the Lox language (http://craftinginterpreters.com/)"
 
 [dependencies]
+clap = { version = "4.5.9", features = ["derive", "env", "string"] }
 miette = { version = "7.2.0", features = ["fancy"] }
 thiserror = "1.0.64"
 tracing = { version = "0.1.40", features = ["max_level_debug", "release_max_level_info"]}
 tracing-subscriber = "0.3.18"
+directories = "5.0.1"
+rustyline = {version= "14.0.0", features = ["with-file-history", "derive"]}
+strum = { version = "0.25", features = ["derive"] }
+phf = { version = "0.11.2", features = ["macros"] }
+[dev-dependencies]
+assert_matches = "1.5"
