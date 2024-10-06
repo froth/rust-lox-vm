@@ -18,6 +18,8 @@ mod lox;
 mod lox_vector;
 mod memory;
 mod op;
+mod scanner;
+mod token;
 mod value;
 mod vm;
 
@@ -101,3 +103,7 @@ fn run_prompt(mut lox: Lox, args: Args) -> rustyline::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[macro_use]
+extern crate assert_matches;
