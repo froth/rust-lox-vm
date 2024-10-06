@@ -1,6 +1,6 @@
 use miette::{NamedSource, Result};
 
-use crate::{error::InterpreterError, scanner::Scanner, value::Value};
+use crate::{scanner::Scanner, value::Value};
 
 pub struct Lox;
 
@@ -10,14 +10,19 @@ impl Lox {
     }
 
     pub fn run(&mut self, src: NamedSource<String>) -> Result<()> {
-        Err(InterpreterError::RuntimeError)?
+        let scanner = Scanner::new(&src);
+        for a in scanner {
+            let token = a?;
+            println!("{:?}", token.token_type)
+        }
+        Ok(())
     }
 
     pub fn run_repl(&mut self, src: NamedSource<String>) -> Result<Option<Value>> {
-        let mut scanner = Scanner::new(&src);
-        while let Some(a) = scanner.next() {
+        let scanner = Scanner::new(&src);
+        for a in scanner {
             let token = a?;
-            println!("{}", token.token_type)
+            println!("{:?}", token.token_type)
         }
         Ok(None)
     }

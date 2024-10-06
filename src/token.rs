@@ -15,9 +15,9 @@ pub enum TokenType<'a> {
     LeftParen,
     #[strum(serialize = ")")]
     RightParen,
-    #[strum(serialize = "{{")]
+    #[strum(serialize = "{")]
     LeftBrace,
-    #[strum(serialize = "}}")]
+    #[strum(serialize = "}")]
     RightBrace,
     #[strum(serialize = ",")]
     Comma,
@@ -74,7 +74,4 @@ pub enum TokenType<'a> {
     True,
     Var,
     While,
-
-    // Eof
-    Eof,
 }
