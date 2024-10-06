@@ -1,18 +1,9 @@
 use std::fmt::Write as _;
 
-use miette::{Diagnostic, NamedSource, Result};
-use thiserror::Error;
+use miette::{NamedSource, Result};
 use tracing::debug;
 
-use crate::{chunk::Chunk, op::Op, value::Value};
-
-#[derive(Error, Diagnostic, Debug)]
-pub enum InterpreterError {
-    // #[error("Oops compiler blew up")]
-    // CompileError,
-    #[error("Oops vm blew up")]
-    RuntimeError,
-}
+use crate::{chunk::Chunk, error::InterpreterError, op::Op, value::Value};
 
 const STACK_SIZE: usize = 256;
 
