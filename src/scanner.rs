@@ -1,7 +1,6 @@
 use crate::token::{Token, TokenType};
 
 use miette::{Diagnostic, NamedSource, SourceSpan};
-use phf::phf_map;
 
 #[derive(thiserror::Error, Debug, Diagnostic)]
 pub enum ScannerError {
@@ -22,25 +21,6 @@ pub enum ScannerError {
         location: SourceSpan,
     },
 }
-
-pub static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
-    "and" => TokenType::And,
-    "false" => TokenType::False,
-    "fun" => TokenType::Fun,
-    "for" => TokenType::For,
-    "if" => TokenType::If,
-    "else" => TokenType::Else,
-    "nil" => TokenType::Nil,
-    "or" => TokenType::Or,
-    "print" => TokenType::Print,
-    "return" => TokenType::Return,
-    "super" => TokenType::Super,
-    "this" => TokenType::This,
-    "true" => TokenType::True,
-    "var" => TokenType::Var,
-    "while" => TokenType::While,
-    "class" => TokenType::Class,
-};
 
 pub type Result<T> = core::result::Result<T, ScannerError>;
 
@@ -159,9 +139,39 @@ impl<'a> Scanner<'a> {
             self.advance();
         }
 
+        self.identifier_type()
+    }
+
+    fn identifier_type(&self) -> TokenType<'a> {
         let text = &self.src.inner()[self.start..self.at];
-        let token = KEYWORDS.get(text).cloned();
-        token.unwrap_or(TokenType::Identifier(text))
+        let mut iter = text.chars();
+        let next = iter.next().expect("self.start outside of token");
+
+        match next {
+            'a' if iter.as_str() == "nd" => TokenType::And,
+            'c' if iter.as_str() == "lass" => TokenType::Class,
+            'e' if iter.as_str() == "lse" => TokenType::Else,
+            'i' if iter.as_str() == "f" => TokenType::If,
+            'n' if iter.as_str() == "il" => TokenType::Nil,
+            'o' if iter.as_str() == "r" => TokenType::Or,
+            'p' if iter.as_str() == "rint" => TokenType::Print,
+            'r' if iter.as_str() == "eturn" => TokenType::Return,
+            's' if iter.as_str() == "uper" => TokenType::Super,
+            'v' if iter.as_str() == "ar" => TokenType::Var,
+            'w' if iter.as_str() == "hile" => TokenType::While,
+            'f' => match iter.next().expect("self.start + 1 outside of token") {
+                'a' if iter.as_str() == "lse" => TokenType::False,
+                'o' if iter.as_str() == "r" => TokenType::For,
+                'u' if iter.as_str() == "n" => TokenType::Fun,
+                _ => TokenType::Identifier(text),
+            },
+            't' => match iter.next().expect("self.start + 1 outside of token") {
+                'h' if iter.as_str() == "is" => TokenType::This,
+                'r' if iter.as_str() == "ue" => TokenType::True,
+                _ => TokenType::Identifier(text),
+            },
+            _ => TokenType::Identifier(text),
+        }
     }
 }
 
