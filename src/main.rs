@@ -1,7 +1,6 @@
 use args::Args;
 use clap::Parser as _;
 use error::InterpreterError;
-use lox::Lox;
 use miette::{IntoDiagnostic, NamedSource, Result};
 use rustyline::{
     error::ReadlineError, highlight::MatchingBracketHighlighter,
@@ -10,11 +9,12 @@ use rustyline::{
 use std::fs;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
+use vm::VM;
 
 mod args;
 mod chunk;
+mod compiler;
 mod error;
-mod lox;
 mod lox_vector;
 mod memory;
 mod op;
@@ -33,36 +33,41 @@ fn main() {
     let subscriber = FmtSubscriber::builder().with_max_level(level).finish();
 
     tracing::subscriber::set_global_default(subscriber).unwrap();
-    let lox = Lox::new();
+    let vm = VM::new();
     let result = match args.file {
-        Some(file) => run_file(lox, file),
-        None => run_prompt(lox, args).into_diagnostic(),
+        Some(file) => run_file(vm, file),
+        None => run_prompt(vm, args).into_diagnostic(),
     };
     match result {
         Ok(_) => (),
         Err(err) => {
-            eprintln!("{:?}", err);
-            let return_code = if let Some(compile_error) = err.downcast_ref::<InterpreterError>() {
+            if let Some(compile_error) = err.downcast_ref::<InterpreterError>() {
                 match compile_error {
-                    InterpreterError::CompileError => 65,
-                    InterpreterError::RuntimeError => 70,
+                    InterpreterError::CompileError(err) => {
+                        eprintln!("{:?}", err);
+                        std::process::exit(65)
+                    }
+                    InterpreterError::RuntimeError(err) => {
+                        eprintln!("{:?}", err);
+                        std::process::exit(75)
+                    }
                 }
             } else {
-                74
+                eprintln!("{:?}", err);
+                std::process::exit(74)
             };
-            std::process::exit(return_code)
         }
     };
 }
 
-fn run_file(mut lox: Lox, file: String) -> Result<()> {
+fn run_file(mut vm: VM, file: String) -> Result<()> {
     let contents = fs::read_to_string(file.clone()).into_diagnostic()?;
 
     let named_source = NamedSource::new(file, contents);
-    lox.run(named_source)
+    vm.interpret(named_source).into_diagnostic().map(|_| ())
 }
 
-fn run_prompt(mut lox: Lox, args: Args) -> rustyline::Result<()> {
+fn run_prompt(mut vm: VM, args: Args) -> rustyline::Result<()> {
     #[derive(Helper, Completer, Hinter, Validator, Highlighter, Default)]
     struct MyHelper {
         #[rustyline(Validator)]
@@ -85,10 +90,11 @@ fn run_prompt(mut lox: Lox, args: Args) -> rustyline::Result<()> {
         match readline {
             Ok(source) => {
                 rl.add_history_entry(source.as_str())?;
-                match lox.run_repl(NamedSource::new("repl", source)) {
+                match vm.interpret(NamedSource::new("repl", source)) {
                     Ok(Some(value)) => println!("expr => {}", value),
                     Ok(None) => (),
-                    Err(err) => println!("{:?}", err),
+                    Err(InterpreterError::CompileError(err)) => println!("{:?}", err),
+                    Err(InterpreterError::RuntimeError(err)) => println!("{:?}", err),
                 }
             }
             Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,

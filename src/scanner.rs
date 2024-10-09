@@ -1,6 +1,6 @@
 use crate::token::{Token, TokenType};
 
-use miette::{Diagnostic, NamedSource, SourceSpan};
+use miette::{Diagnostic, NamedSource, Result, SourceSpan};
 
 #[derive(thiserror::Error, Debug, Diagnostic)]
 pub enum ScannerError {
@@ -21,8 +21,6 @@ pub enum ScannerError {
         location: SourceSpan,
     },
 }
-
-pub type Result<T> = core::result::Result<T, ScannerError>;
 
 pub struct Scanner<'a> {
     src: &'a NamedSource<String>,
@@ -235,7 +233,8 @@ impl<'a> Iterator for Scanner<'a> {
                     char,
                     src: self.src.clone(),
                     location: SourceSpan::from(self.start..self.at),
-                }))
+                }
+                .into()))
             }
         };
         Some(Ok(Token {
@@ -355,7 +354,8 @@ mod tests {
         let src = NamedSource::new("", "^".to_string());
         let scanner = Scanner::new(&src);
         let result: Result<Vec<_>> = scanner.collect();
-        assert_matches!(result.unwrap_err(), ScannerError::UnexpectedCharacter {
+        let error = result.unwrap_err().downcast().unwrap();
+        assert_matches!(error, ScannerError::UnexpectedCharacter {
              char: '^',
              src,
              location,
@@ -367,7 +367,8 @@ mod tests {
         let src = NamedSource::new("", "\"unterminated".to_string());
         let scanner = Scanner::new(&src);
         let result: Result<Vec<_>> = scanner.collect();
-        assert_matches!(result.unwrap_err(), ScannerError::NonTerminatedString {
+        let error = result.unwrap_err().downcast().unwrap();
+        assert_matches!(error, ScannerError::NonTerminatedString {
              src: _,
              location,
          } if location == SourceSpan::from(0..13))
