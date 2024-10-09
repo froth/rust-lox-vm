@@ -19,9 +19,9 @@ impl Chunk {
         }
     }
 
-    pub fn write(&mut self, op: Op, span: SourceSpan) {
+    pub fn write(&mut self, op: Op, location: SourceSpan) {
         self.code.push(op);
-        self.spans.push(span);
+        self.spans.push(location);
     }
 
     pub fn add_constant(&mut self, value: Value) -> u8 {
@@ -31,8 +31,9 @@ impl Chunk {
             .expect("constant count overflows u8, not supported")
     }
 
-    pub fn disassemble<T: SourceCode>(&self, source: &NamedSource<T>) {
-        eprintln!("== {} ==", source.name());
+    pub fn disassemble<T: SourceCode>(&self, source: &NamedSource<T>) -> String {
+        let mut result = String::new();
+        let _ = writeln!(&mut result, "== {} ==", source.name());
         let iter = self.code.iter().zip(self.spans.iter()).enumerate();
         let mut last_line_number = None;
 
@@ -40,9 +41,10 @@ impl Chunk {
             let (disassembled, line_number) = self
                 .to_disassembled(offset, op, span, source, last_line_number)
                 .expect("writing to String can't fail");
-            eprintln!("{disassembled}");
+            let _ = writeln!(&mut result, "{disassembled}");
             last_line_number = Some(line_number);
         }
+        result
     }
 
     pub fn disassemble_at<T: SourceCode>(&self, source: &NamedSource<T>, at: usize) -> String {

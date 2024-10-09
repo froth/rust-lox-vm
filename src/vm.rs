@@ -1,9 +1,9 @@
 use std::fmt::Write as _;
 
-use miette::{NamedSource, Result};
+use miette::NamedSource;
 use tracing::debug;
 
-use crate::{chunk::Chunk, error::InterpreterError, op::Op, value::Value};
+use crate::{compiler::Compiler, error::InterpreterError, op::Op, value::Value};
 
 const STACK_SIZE: usize = 256;
 
@@ -17,7 +17,7 @@ macro_rules! binary_operator {
         {
             let b = $self.pop();
             let a = $self.pop();
-            $self.push(b $op a);
+            $self.push(a $op b);
         }
     };
 }
@@ -29,18 +29,23 @@ impl VM {
         Self { stack, stack_top }
     }
 
-    pub fn interpret<T: miette::SourceCode>(
+    pub fn interpret(
         &mut self,
-        chunk: Chunk,
-        source: &NamedSource<T>,
-    ) -> Result<()> {
+        src: NamedSource<String>,
+    ) -> std::result::Result<Option<Value>, InterpreterError> {
+        let chunk = match Compiler::compile(&src) {
+            Ok(c) => c,
+            Err(e) => return Err(InterpreterError::CompileError(e.with_source_code(src))),
+        };
+
         for (i, op) in chunk.code.iter().enumerate() {
-            debug!("{}", chunk.disassemble_at(source, i));
+            debug!("{}", chunk.disassemble_at(&src, i));
             debug!("          {}", self.trace_stack());
             match op {
                 Op::Return => {
-                    println!("{}", self.pop());
-                    return Ok(());
+                    let res = self.pop();
+                    println!("{}", res);
+                    return Ok(Some(res));
                 }
                 Op::Constant(index) => {
                     let constant = chunk.constants[*index as usize];
@@ -56,7 +61,9 @@ impl VM {
                 Op::Divide => binary_operator!(self, /),
             }
         }
-        Err(InterpreterError::RuntimeError.into())
+        Err(InterpreterError::RuntimeError(miette::miette! {
+            "Unexpected end of bytecode"
+        }))
     }
 
     fn push(&mut self, value: Value) {
