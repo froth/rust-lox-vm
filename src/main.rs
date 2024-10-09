@@ -64,7 +64,8 @@ fn run_file(mut vm: VM, file: String) -> Result<()> {
     let contents = fs::read_to_string(file.clone()).into_diagnostic()?;
 
     let named_source = NamedSource::new(file, contents);
-    vm.interpret(named_source).into_diagnostic().map(|_| ())
+    vm.interpret(named_source)?;
+    Ok(())
 }
 
 fn run_prompt(mut vm: VM, args: Args) -> rustyline::Result<()> {

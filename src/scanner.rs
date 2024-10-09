@@ -124,7 +124,7 @@ impl<'a> Scanner<'a> {
             }
         }
         let result = self.src.inner()[self.start..self.at]
-            .parse::<f64>()
+            .parse::<f32>()
             .expect("parsing of float an not fail");
         TokenType::Number(result)
     }

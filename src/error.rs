@@ -1,7 +1,7 @@
-use miette::Report;
+use miette::{Diagnostic, Report};
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Diagnostic, Debug)]
 pub enum InterpreterError {
     #[error("Oops compiler blew up")]
     CompileError(Report),

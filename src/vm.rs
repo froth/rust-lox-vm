@@ -17,7 +17,7 @@ macro_rules! binary_operator {
         {
             let b = $self.pop();
             let a = $self.pop();
-            $self.push(b $op a);
+            $self.push(a $op b);
         }
     };
 }

@@ -55,7 +55,7 @@ pub enum TokenType<'a> {
     // Literals
     Identifier(&'a str),
     String(&'a str),
-    Number(f64),
+    Number(f32),
 
     // Keywords.
     And,
@@ -74,4 +74,35 @@ pub enum TokenType<'a> {
     True,
     Var,
     While,
+}
+
+#[derive(Debug, PartialEq, PartialOrd)]
+pub enum Precedence {
+    None,
+    Assignment,
+    Or,
+    And,
+    Equality,
+    Comparision,
+    Term,
+    Factor,
+    Unary,
+    Call,
+    Primary,
+}
+
+impl TokenType<'_> {
+    pub fn is_prefix(&self) -> bool {
+        use TokenType::*;
+        matches!(self, LeftParen | Minus | Number(_))
+    }
+
+    pub fn infix_precedence(&self) -> Precedence {
+        use TokenType::*;
+        match self {
+            Minus | Plus => Precedence::Term,
+            Star | Slash => Precedence::Factor,
+            _ => Precedence::None,
+        }
+    }
 }
