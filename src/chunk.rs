@@ -7,7 +7,7 @@ pub struct Chunk {
     // in original clox this is Vector<u8> this is more wasteful but way easier. Maybe benchmark in the future?
     pub code: LoxVector<Op>,
     pub constants: LoxVector<Value>,
-    spans: LoxVector<SourceSpan>,
+    pub locations: LoxVector<SourceSpan>,
 }
 
 impl Chunk {
@@ -15,13 +15,13 @@ impl Chunk {
         Self {
             code: LoxVector::new(),
             constants: LoxVector::new(),
-            spans: LoxVector::new(),
+            locations: LoxVector::new(),
         }
     }
 
     pub fn write(&mut self, op: Op, location: SourceSpan) {
         self.code.push(op);
-        self.spans.push(location);
+        self.locations.push(location);
     }
 
     pub fn add_constant(&mut self, value: Value) -> u8 {
@@ -34,7 +34,7 @@ impl Chunk {
     pub fn disassemble<T: SourceCode>(&self, source: &NamedSource<T>) -> String {
         let mut result = String::new();
         let _ = writeln!(&mut result, "== {} ==", source.name());
-        let iter = self.code.iter().zip(self.spans.iter()).enumerate();
+        let iter = self.code.iter().zip(self.locations.iter()).enumerate();
         let mut last_line_number = None;
 
         for (offset, (op, span)) in iter {
@@ -48,7 +48,7 @@ impl Chunk {
     }
 
     pub fn disassemble_at<T: SourceCode>(&self, source: &NamedSource<T>, at: usize) -> String {
-        let mut iter = self.code.iter().zip(self.spans.iter()).enumerate();
+        let mut iter = self.code.iter().zip(self.locations.iter()).enumerate();
         if at == 0 {
             let (offset, (op, span)) = iter.next().expect("trying to disassemble empty chunk");
             let (disassembled, _) = self
@@ -92,7 +92,6 @@ impl Chunk {
         }
 
         match op {
-            Op::Return => write!(&mut result, "RETURN")?,
             Op::Constant(const_index) => {
                 let const_index: usize = (*const_index).into();
                 let constant = self.constants[const_index];
@@ -102,11 +101,7 @@ impl Chunk {
                     "CONSTANT", const_index, constant
                 )?;
             }
-            Op::Negate => write!(&mut result, "NEGATE")?,
-            Op::Add => write!(&mut result, "ADD")?,
-            Op::Subtract => write!(&mut result, "SUBTRACT")?,
-            Op::Multiply => write!(&mut result, "MULTIPLY")?,
-            Op::Divide => write!(&mut result, "DIVIDE")?,
+            op => write!(&mut result, "{op}")?,
         }
         Ok((result, line_number))
     }
@@ -120,16 +115,16 @@ mod tests {
     #[test]
     fn constant_index() {
         let mut chunk: Chunk = Chunk::new();
-        let index = chunk.add_constant(12.1);
+        let index = chunk.add_constant(Value::Number(12.1));
         assert_eq!(index, 0);
-        let index = chunk.add_constant(12.1);
+        let index = chunk.add_constant(Value::Number(12.1));
         assert_eq!(index, 1)
     }
 
     #[test]
     fn disassemble_constant() {
         let mut chunk = Chunk::new();
-        let constant = chunk.add_constant(1.1);
+        let constant = chunk.add_constant(Value::Number(1.1));
         let src = "1.1";
         let src = NamedSource::new("src", src);
         chunk.write(Op::Constant(constant), SourceSpan::from((0, 3)));

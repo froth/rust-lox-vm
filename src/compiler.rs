@@ -112,37 +112,63 @@ impl<'a> Compiler<'a> {
 
     fn prefix(&mut self, token: Token) -> Result<()> {
         match token.token_type {
-            TokenType::LeftParen => self.grouping(),
-            TokenType::Minus => self.unary(Op::Negate, token.location),
-            TokenType::Number(f) => self.number(f, token.location),
+            TokenType::LeftParen => self.grouping()?,
+            TokenType::Minus => self.unary(Op::Negate, token.location)?,
+            TokenType::Number(f) => self.emit_constant(Value::Number(f), token.location),
+            TokenType::Nil => self.chunk.write(Op::Nil, token.location),
+            TokenType::True => self.chunk.write(Op::True, token.location),
+            TokenType::False => self.chunk.write(Op::False, token.location),
+            TokenType::Bang => self.unary(Op::Not, token.location)?,
             _ => unreachable!(), // guarded by is_prefix
         }
+        Ok(())
     }
 
     fn infix(&mut self, token: Token) -> Result<()> {
         match token.token_type {
-            TokenType::Minus => self.binary(Op::Subtract, Precedence::Factor, token.location),
-            TokenType::Plus => self.binary(Op::Add, Precedence::Factor, token.location),
-            TokenType::Star => self.binary(Op::Multiply, Precedence::Unary, token.location),
-            TokenType::Slash => self.binary(Op::Divide, Precedence::Unary, token.location),
+            TokenType::Minus => self.binary(Op::Subtract, None, Precedence::Factor, token.location),
+            TokenType::Plus => self.binary(Op::Add, None, Precedence::Factor, token.location),
+            TokenType::Star => self.binary(Op::Multiply, None, Precedence::Unary, token.location),
+            TokenType::Slash => self.binary(Op::Divide, None, Precedence::Unary, token.location),
+            TokenType::BangEqual => self.binary(
+                Op::Equal,
+                Some(Op::Not),
+                Precedence::Comparision,
+                token.location,
+            ),
+            TokenType::EqualEqual => {
+                self.binary(Op::Equal, None, Precedence::Comparision, token.location)
+            }
+            TokenType::Greater => self.binary(Op::Greater, None, Precedence::Term, token.location),
+            TokenType::GreaterEqual => {
+                self.binary(Op::Less, Some(Op::Not), Precedence::Term, token.location)
+            }
+            TokenType::Less => self.binary(Op::Less, None, Precedence::Term, token.location),
+            TokenType::LessEqual => {
+                self.binary(Op::Greater, Some(Op::Not), Precedence::Term, token.location)
+            }
             _ => unreachable!(), // guarded by infix_precedence
         }
     }
 
-    fn binary(&mut self, op: Op, precedence: Precedence, location: SourceSpan) -> Result<()> {
+    fn binary(
+        &mut self,
+        op: Op,
+        second_op: Option<Op>,
+        precedence: Precedence,
+        location: SourceSpan,
+    ) -> Result<()> {
         self.parse_precedence(precedence)?;
         self.chunk.write(op, location);
+        if let Some(o) = second_op {
+            self.chunk.write(o, location)
+        }
         Ok(())
     }
 
     fn unary(&mut self, op: Op, location: SourceSpan) -> Result<()> {
         self.expression()?;
         self.chunk.write(op, location);
-        Ok(())
-    }
-
-    fn number(&mut self, number: f32, location: SourceSpan) -> Result<()> {
-        self.emit_constant(number, location);
         Ok(())
     }
 
