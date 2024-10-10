@@ -94,7 +94,10 @@ pub enum Precedence {
 impl TokenType<'_> {
     pub fn is_prefix(&self) -> bool {
         use TokenType::*;
-        matches!(self, LeftParen | Minus | Number(_))
+        matches!(
+            self,
+            LeftParen | Minus | Number(_) | Nil | True | False | Bang
+        )
     }
 
     pub fn infix_precedence(&self) -> Precedence {
@@ -102,6 +105,8 @@ impl TokenType<'_> {
         match self {
             Minus | Plus => Precedence::Term,
             Star | Slash => Precedence::Factor,
+            EqualEqual | BangEqual => Precedence::Equality,
+            Greater | GreaterEqual | Less | LessEqual => Precedence::Comparision,
             _ => Precedence::None,
         }
     }
