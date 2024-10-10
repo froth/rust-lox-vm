@@ -55,7 +55,7 @@ pub enum TokenType<'a> {
     // Literals
     Identifier(&'a str),
     String(&'a str),
-    Number(f32),
+    Number(f64),
 
     // Keywords.
     And,
