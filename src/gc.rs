@@ -2,7 +2,7 @@ use std::ptr::NonNull;
 
 use crate::value::Obj;
 
-struct Gc {
+pub struct Gc {
     head: Option<Box<Node>>,
 }
 
@@ -12,7 +12,7 @@ struct Node {
 }
 
 impl Gc {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self { head: None }
     }
 

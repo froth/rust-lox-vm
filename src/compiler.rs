@@ -5,16 +5,18 @@ use tracing::debug;
 
 use crate::{
     chunk::Chunk,
+    gc::Gc,
     op::Op,
     scanner::Scanner,
     token::{Precedence, Token, TokenType},
-    value::Value,
+    value::{Obj, Value},
 };
 
-pub struct Compiler<'a> {
+pub struct Compiler<'a, 'gc> {
     scanner: Peekable<Scanner<'a>>,
     eof: ByteOffset,
     chunk: Chunk,
+    gc: &'gc mut Gc,
 }
 
 macro_rules! consume {
@@ -29,19 +31,20 @@ macro_rules! consume {
     }};
 }
 
-impl<'a> Compiler<'a> {
-    fn new(src: &'a NamedSource<String>) -> Self {
+impl<'a, 'gc> Compiler<'a, 'gc> {
+    fn new(src: &'a NamedSource<String>, gc: &'gc mut Gc) -> Self {
         let eof = src.inner().len().saturating_sub(1);
         let scanner = Scanner::new(src);
         Compiler {
             scanner: scanner.peekable(),
             eof,
             chunk: Chunk::new(),
+            gc,
         }
     }
 
-    pub fn compile(src: &'a NamedSource<String>) -> Result<Chunk> {
-        let mut compiler = Compiler::new(src);
+    pub fn compile(src: &'a NamedSource<String>, gc: &'gc mut Gc) -> Result<Chunk> {
+        let mut compiler = Compiler::new(src, gc);
         compiler.expression()?;
         match compiler.scanner.next() {
             Some(res) => {
@@ -114,11 +117,15 @@ impl<'a> Compiler<'a> {
         match token.token_type {
             TokenType::LeftParen => self.grouping()?,
             TokenType::Minus => self.unary(Op::Negate, token.location)?,
+            TokenType::Bang => self.unary(Op::Not, token.location)?,
             TokenType::Number(f) => self.emit_constant(Value::Number(f), token.location),
             TokenType::Nil => self.chunk.write(Op::Nil, token.location),
             TokenType::True => self.chunk.write(Op::True, token.location),
             TokenType::False => self.chunk.write(Op::False, token.location),
-            TokenType::Bang => self.unary(Op::Not, token.location)?,
+            TokenType::String(s) => {
+                let obj = self.gc.manage(Obj::String(s.to_string()));
+                self.emit_constant(Value::Obj(obj), token.location)
+            }
             _ => unreachable!(), // guarded by is_prefix
         }
         Ok(())

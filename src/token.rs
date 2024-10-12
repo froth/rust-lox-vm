@@ -1,4 +1,5 @@
 use miette::SourceSpan;
+use rustyline::completion::Quote;
 use strum::Display;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -96,7 +97,7 @@ impl TokenType<'_> {
         use TokenType::*;
         matches!(
             self,
-            LeftParen | Minus | Number(_) | Nil | True | False | Bang
+            LeftParen | Minus | Bang | Number(_) | Nil | True | False | String(_)
         )
     }
 

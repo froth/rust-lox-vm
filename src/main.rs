@@ -15,6 +15,7 @@ mod args;
 mod chunk;
 mod compiler;
 mod error;
+mod gc;
 mod lox_vector;
 mod memory;
 mod op;
