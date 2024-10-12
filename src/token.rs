@@ -1,5 +1,4 @@
 use miette::SourceSpan;
-use rustyline::completion::Quote;
 use strum::Display;
 
 #[derive(Debug, Clone, PartialEq)]
