@@ -42,7 +42,7 @@ impl<'a> Scanner<'a> {
     fn advance(&mut self) -> Option<char> {
         if let Some(char) = self.rest.chars().next() {
             self.at += char.len_utf8();
-            self.rest = &self.rest[1..];
+            self.rest = &self.rest[char.len_utf8()..];
             Some(char)
         } else {
             None
@@ -53,7 +53,7 @@ impl<'a> Scanner<'a> {
         match self.rest.chars().next() {
             Some(char) if char == expected => {
                 self.at += char.len_utf8();
-                self.rest = &self.rest[1..];
+                self.rest = &self.rest[char.len_utf8()..];
                 true
             }
             _ => false,

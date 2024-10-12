@@ -3,13 +3,21 @@ use std::fmt::Write as _;
 use miette::{LabeledSpan, NamedSource};
 use tracing::debug;
 
-use crate::{chunk::Chunk, compiler::Compiler, error::InterpreterError, op::Op, value::Value};
+use crate::{
+    chunk::Chunk,
+    compiler::Compiler,
+    error::InterpreterError,
+    gc::Gc,
+    op::Op,
+    value::{Obj, Value},
+};
 
 const STACK_SIZE: usize = 256;
 
 pub struct VM {
     stack: Box<[Value; STACK_SIZE]>,
     stack_top: *mut Value,
+    gc: Gc,
 }
 
 macro_rules! binary_operator {
@@ -33,14 +41,19 @@ impl VM {
     pub fn new() -> Self {
         let mut stack = Box::new([Value::Nil; STACK_SIZE]);
         let stack_top = stack.as_mut_ptr();
-        Self { stack, stack_top }
+        let gc = Gc::new();
+        Self {
+            stack,
+            stack_top,
+            gc,
+        }
     }
 
     pub fn interpret(
         &mut self,
         src: NamedSource<String>,
     ) -> std::result::Result<Option<Value>, InterpreterError> {
-        let chunk = match Compiler::compile(&src) {
+        let chunk = match Compiler::compile(&src, &mut self.gc) {
             Ok(c) => c,
             Err(e) => return Err(InterpreterError::CompileError(e.with_source_code(src))),
         };
@@ -87,7 +100,7 @@ impl VM {
                         );
                     }
                 }
-                Op::Add => binary_operator!(self, chunk, i, +, Value::Number),
+                Op::Add => self.plus_operator(&chunk, i)?,
                 Op::Subtract => binary_operator!(self, chunk,i,  -, Value::Number),
                 Op::Multiply => binary_operator!(self, chunk,i, *, Value::Number),
                 Op::Divide => binary_operator!(self, chunk,i, /, Value::Number),
@@ -107,6 +120,28 @@ impl VM {
         Err(miette::miette! {
             "Unexpected end of bytecode"
         })
+    }
+
+    fn plus_operator(&mut self, chunk: &Chunk, index: usize) -> miette::Result<()> {
+        match (self.peek(1), self.peek(0)) {
+            (Value::Number(a), Value::Number(b)) => {
+                self.pop();
+                self.pop();
+                self.push(Value::Number(a + b));
+            }
+            (Value::Obj(a), Value::Obj(b)) => {
+                let (Obj::String(a), Obj::String(b)) = unsafe { (a.as_ref(), b.as_ref()) };
+                self.pop();
+                self.pop();
+                let concated = self.gc.manage(Obj::String(a.to_owned() + b));
+                self.push(Value::Obj(concated));
+            }
+            _ => miette::bail!(
+                labels = vec![LabeledSpan::at(chunk.locations[index], "here")],
+                "Operands for operation must be both be numbers or Strings"
+            ),
+        }
+        Ok(())
     }
 
     fn push(&mut self, value: Value) {
