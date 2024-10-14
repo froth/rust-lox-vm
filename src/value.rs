@@ -1,36 +1,11 @@
 use std::{fmt::Display, ptr::NonNull};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Value {
     Number(f64),
     Boolean(bool),
     Nil,
     Obj(NonNull<Obj>),
-}
-
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Nil, Self::Nil) => true,
-            (Self::Number(l0), Self::Number(r0)) => l0 == r0,
-            (Self::Boolean(l0), Self::Boolean(r0)) => l0 == r0,
-            (Self::Obj(l0), Self::Obj(r0)) => unsafe { l0.as_ref() == r0.as_ref() },
-            _ => false,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Obj {
-    String(String),
-}
-
-impl Display for Obj {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Obj::String(s) => write!(f, "\"{}\"", s),
-        }
-    }
 }
 
 impl Value {
@@ -53,20 +28,37 @@ impl Display for Value {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::ptr::NonNull;
+#[derive(Debug, Clone, PartialEq)]
+pub enum Obj {
+    String(LoxString),
+}
 
-    use crate::value::Value;
+#[derive(Debug, Clone, PartialEq)]
+pub struct LoxString {
+    pub string: String,
+    pub hash: u32,
+}
 
-    use super::Obj;
+impl Obj {
+    pub fn from_str(s: &str) -> Obj {
+        Obj::string(s.to_owned())
+    }
 
-    #[test]
-    fn string_equal() {
-        let mut a = Obj::String(format!("asd{}", "asdasd"));
-        let mut b = Obj::String("asdasdasd".to_string());
-        let av = Value::Obj(NonNull::new(&mut a).unwrap());
-        let bv = Value::Obj(NonNull::new(&mut b).unwrap());
-        assert_eq!(av, bv)
+    pub fn string(string: String) -> Obj {
+        const PRIME: u32 = 16777619;
+        let mut hash: u32 = 2166136261;
+        for b in string.bytes() {
+            hash ^= b as u32;
+            hash = hash.wrapping_mul(PRIME);
+        }
+        Obj::String(LoxString { string, hash })
+    }
+}
+
+impl Display for Obj {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Obj::String(s) => write!(f, "\"{}\"", s.string),
+        }
     }
 }

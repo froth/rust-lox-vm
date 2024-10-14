@@ -46,14 +46,14 @@ mod tests {
     #[test]
     fn push() {
         let mut gc = Gc::new();
-        let one = gc.manage(Obj::String("asfsaf".to_string()));
+        let one = gc.manage(Obj::from_str("asfsaf"));
         let one = unsafe { one.as_ref() };
-        assert_eq!(one, &Obj::String("asfsaf".to_string()));
-        let two = gc.manage(Obj::String("sfdsdfsaf".to_string()));
+        assert_eq!(one, &Obj::from_str("asfsaf"));
+        let two = gc.manage(Obj::from_str("sfdsdfsaf"));
         let two = unsafe { two.as_ref() };
-        assert_eq!(two, &Obj::String("sfdsdfsaf".to_string()));
-        let three = gc.manage(Obj::String("sfdsasdasddfsaf".to_string()));
+        assert_eq!(two, &Obj::from_str("sfdsdfsaf"));
+        let three = gc.manage(Obj::from_str("sfdsasdasddfsaf"));
         let three = unsafe { three.as_ref() };
-        assert_eq!(three, &Obj::String("sfdsasdasddfsaf".to_string()));
+        assert_eq!(three, &Obj::from_str("sfdsasdasddfsaf"));
     }
 }

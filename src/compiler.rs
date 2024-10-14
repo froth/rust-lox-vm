@@ -123,7 +123,7 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
             TokenType::True => self.chunk.write(Op::True, token.location),
             TokenType::False => self.chunk.write(Op::False, token.location),
             TokenType::String(s) => {
-                let obj = self.gc.manage(Obj::String(s.to_string()));
+                let obj = self.gc.manage(Obj::from_str(s));
                 self.emit_constant(Value::Obj(obj), token.location)
             }
             _ => unreachable!(), // guarded by is_prefix

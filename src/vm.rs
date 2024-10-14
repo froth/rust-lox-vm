@@ -133,7 +133,7 @@ impl VM {
                 let (Obj::String(a), Obj::String(b)) = unsafe { (a.as_ref(), b.as_ref()) };
                 self.pop();
                 self.pop();
-                let concated = self.gc.manage(Obj::String(a.to_owned() + b));
+                let concated = self.gc.manage(Obj::string(a.string.to_owned() + &b.string));
                 self.push(Value::Obj(concated));
             }
             _ => miette::bail!(
