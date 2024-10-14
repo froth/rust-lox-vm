@@ -1,6 +1,6 @@
-use std::ptr::NonNull;
+use std::{hint::unreachable_unchecked, ptr::NonNull};
 
-use crate::value::Obj;
+use crate::value::{LoxString, Obj};
 
 pub struct Gc {
     head: Option<Box<Node>>,
@@ -26,6 +26,26 @@ impl Gc {
         self.head = Some(new_node);
         // SAFETY: guaranteed to be not null
         unsafe { NonNull::new_unchecked(ptr) }
+    }
+
+    pub fn manage_string(&mut self, string: LoxString) -> *const LoxString {
+        let old_head = self.head.take();
+        let obj = Obj::String(string);
+        let mut new_node = Box::new(Node {
+            next: old_head,
+            obj,
+        });
+        match &mut new_node.obj {
+            Obj::String(s) => {
+                // TODO: that is not good
+                let ptr: *mut LoxString = s;
+                self.head = Some(new_node);
+                // SAFETY: guaranteed to be not null
+                ptr
+            }
+            // SAFETY: Obj::String created above
+            _ => unsafe { unreachable_unchecked() },
+        }
     }
 }
 

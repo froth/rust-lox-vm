@@ -1,5 +1,7 @@
-use std::fmt::Write as _;
 use std::ptr::NonNull;
+use std::{fmt::Write as _, mem};
+
+use tracing::debug;
 
 use crate::value::{LoxString, Value};
 
@@ -44,6 +46,19 @@ impl HashTable {
         is_new_key
     }
 
+    pub fn get(&self, key: *const LoxString) -> Option<Value> {
+        if self.count == 0 {
+            return None;
+        }
+
+        let entry = Self::find_entry(self.entries, self.capacity, key);
+        if unsafe { (*entry).key.is_some() } {
+            Some(unsafe { (*entry).value })
+        } else {
+            None
+        }
+    }
+
     fn find_entry(entries: NonNull<Entry>, capacity: u32, key: *const LoxString) -> *mut Entry {
         let mut index: u32 = unsafe { (*key).hash } % capacity;
         loop {
@@ -58,8 +73,8 @@ impl HashTable {
     }
 
     fn adjust_capacity(&mut self, new_capacity: u32) {
-        let new_pointer =
-            memory::reallocate(self.entries, self.capacity as usize, new_capacity as usize);
+        println!("NEW CAP{}", new_capacity);
+        let new_pointer: NonNull<Entry> = memory::alloc_array(new_capacity as usize);
         for i in 0..new_capacity {
             unsafe {
                 *new_pointer.as_ptr().add(i as usize) = Entry {
@@ -68,9 +83,25 @@ impl HashTable {
                 }
             }
         }
-        self.entries = new_pointer;
+
+        let old_entities = self.entries;
+        let old_capacity = self.capacity;
+
         self.capacity = new_capacity;
-        // self.count = self.count; // TODO
+        self.entries = new_pointer;
+        self.count = 0;
+
+        if old_capacity > 0 {
+            for i in 0..old_capacity {
+                unsafe {
+                    let entry = old_entities.as_ptr().add(i as usize);
+                    if let Some(key) = (*entry).key {
+                        self.insert(key, (*entry).value);
+                    }
+                }
+            }
+            memory::free_array(old_entities, old_capacity as usize);
+        }
     }
 }
 
@@ -85,15 +116,18 @@ impl Drop for HashTable {
 impl std::fmt::Debug for HashTable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut entries = String::new();
+        let mut real_count = 0;
         for i in 0..self.capacity {
             let entry = unsafe { (*self.entries.as_ptr().add(i as usize)).clone() };
             if let Some(key) = entry.key {
                 let key = unsafe { (*key).clone() };
-                write!(&mut entries, "[{:?}=>{:?}] ", key, entry.value)?;
+                write!(&mut entries, "[{}:{:?}=>{:?}] ", i, key.string, entry.value)?;
+                real_count += 1;
             }
         }
         f.debug_struct("HashTable")
             .field("count", &self.count)
+            .field("real_count", &format!("{}", real_count))
             .field("capacity", &self.capacity)
             .field("entries", &entries)
             .finish()
@@ -123,16 +157,42 @@ mod tests {
     #[test]
     fn insert_one() {
         let mut table: HashTable = HashTable::new();
-        let s = LoxString::from_str("key");
-        let s1 = LoxString::from_str("key1");
-        let value = Obj::from_str("asfsafsafd");
-        let mut gc = Gc::new();
-        let value = gc.manage(value);
-        table.insert(&s, Value::Boolean(true));
-        table.insert(&s, Value::Boolean(true));
-        table.insert(&s1, Value::Obj(value));
+        let key = LoxString::from_str("key");
+        let unfound = LoxString::from_str("key");
+        table.insert(&key, Value::Boolean(true));
+        assert_eq!(table.capacity, 8);
+        assert_eq!(table.count, 1);
+        let ret = table.get(&key);
+        assert_eq!(ret, Some(Value::Boolean(true)));
+        assert_eq!(table.get(&unfound), None);
+    }
+
+    #[test]
+    fn insert_two() {
+        let mut table: HashTable = HashTable::new();
+        let key1 = LoxString::from_str("key1");
+        let key2 = LoxString::from_str("key2");
+        table.insert(&key1, Value::Boolean(true));
+        table.insert(&key2, Value::Boolean(false));
         assert_eq!(table.capacity, 8);
         assert_eq!(table.count, 2);
-        println!("{:?}", table);
+        let ret = table.get(&key1);
+        assert_eq!(ret, Some(Value::Boolean(true)));
+        let ret = table.get(&key2);
+        assert_eq!(ret, Some(Value::Boolean(false)));
+    }
+
+    #[test]
+    fn insert_2049() {
+        let mut gc = Gc::new();
+        let mut table: HashTable = HashTable::new();
+        for i in 0..2049 {
+            let pointer = gc.manage_string(LoxString::string(format!("key{}", i)));
+            table.insert(pointer, Value::Number(f64::from(i)));
+            let ret = table.get(pointer);
+            assert_eq!(ret, Some(Value::Number(f64::from(i))));
+        }
+        assert_eq!(table.count, 2049);
+        assert_eq!(table.capacity, 4096);
     }
 }

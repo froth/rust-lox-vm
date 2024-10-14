@@ -11,6 +11,26 @@ pub fn grow_capacity(capacity: usize) -> usize {
     }
 }
 
+pub fn alloc_array<T>(new_capacity: usize) -> NonNull<T> {
+    let new_layout = Layout::array::<T>(new_capacity).unwrap();
+    // SAFETY:
+    // layout has guaranteed non-zero size as 0 size new has been matched above
+    let new_ptr = unsafe { alloc(new_layout) };
+    match NonNull::new(new_ptr as *mut T) {
+        Some(p) => p,
+        None => handle_alloc_error(new_layout),
+    }
+}
+
+pub fn free_array<T>(pointer: NonNull<T>, old_capacity: usize) {
+    unsafe {
+        dealloc(
+            pointer.as_ptr() as *mut u8,
+            Layout::array::<T>(old_capacity).unwrap(),
+        )
+    }
+}
+
 pub fn reallocate<T>(pointer: NonNull<T>, old_capacity: usize, new_capacity: usize) -> NonNull<T> {
     let old_ptr = pointer.as_ptr() as *mut u8;
     let new_layout = Layout::array::<T>(new_capacity).unwrap();
