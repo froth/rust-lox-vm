@@ -3,7 +3,7 @@ use std::{
     ptr::{self, NonNull},
 };
 
-use crate::memory;
+use super::memory;
 
 /// Custom Vector type.
 /// In clox several special purpose dynamic arrays exist, I made a generic type as it is easy enough in Rust.
@@ -57,7 +57,8 @@ impl<T> LoxVector<T> {
 impl<T> Drop for LoxVector<T> {
     fn drop(&mut self) {
         if self.capacity != 0 {
-            while self.pop().is_some() {}
+            // this would be the right thing to do on a general purpose vec but we know that no used entry type implements Drop
+            // while self.pop().is_some() {}
             memory::reallocate(self.ptr, self.capacity, 0);
         }
     }

@@ -17,7 +17,6 @@ mod compiler;
 mod datastructures;
 mod error;
 mod gc;
-mod memory;
 mod op;
 mod scanner;
 mod token;

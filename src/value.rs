@@ -33,25 +33,13 @@ pub enum Obj {
     String(LoxString),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct LoxString {
-    pub string: String,
-    pub hash: u32,
-}
-
 impl Obj {
-    pub fn from_str(s: &str) -> Obj {
-        Obj::string(s.to_owned())
+    pub fn from_str(s: &str) -> Self {
+        Self::String(LoxString::string(s.to_owned()))
     }
 
-    pub fn string(string: String) -> Obj {
-        const PRIME: u32 = 16777619;
-        let mut hash: u32 = 2166136261;
-        for b in string.bytes() {
-            hash ^= b as u32;
-            hash = hash.wrapping_mul(PRIME);
-        }
-        Obj::String(LoxString { string, hash })
+    pub fn string(string: String) -> Self {
+        Self::String(LoxString::string(string))
     }
 }
 
@@ -60,5 +48,27 @@ impl Display for Obj {
         match self {
             Obj::String(s) => write!(f, "\"{}\"", s.string),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LoxString {
+    pub string: String,
+    pub hash: u32,
+}
+
+impl LoxString {
+    pub fn from_str(s: &str) -> Self {
+        Self::string(s.to_owned())
+    }
+
+    pub fn string(string: String) -> Self {
+        const PRIME: u32 = 16777619;
+        let mut hash: u32 = 2166136261;
+        for b in string.bytes() {
+            hash ^= b as u32;
+            hash = hash.wrapping_mul(PRIME);
+        }
+        Self { string, hash }
     }
 }
