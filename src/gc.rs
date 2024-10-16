@@ -28,24 +28,16 @@ impl Gc {
         ObjRef::new(unsafe { NonNull::new_unchecked(ptr) })
     }
 
-    pub fn manage_string(&mut self, string: LoxString) -> *const LoxString {
+    pub fn manage_string(&mut self, string: LoxString) -> ObjRef {
         let old_head = self.head.take();
         let obj = Obj::String(string);
         let mut new_node = Box::new(Node {
             next: old_head,
             obj,
         });
-        match &mut new_node.obj {
-            Obj::String(s) => {
-                // TODO: that is not good
-                let ptr: *mut LoxString = s;
-                self.head = Some(new_node);
-                // SAFETY: guaranteed to be not null
-                ptr
-            }
-            // SAFETY: Obj::String created above
-            _ => unsafe { unreachable_unchecked() },
-        }
+        let obj_ref = ObjRef::from_obj(&mut new_node.obj);
+        self.head = Some(new_node);
+        obj_ref
     }
 }
 

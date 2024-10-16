@@ -9,6 +9,10 @@ impl ObjRef {
     pub fn new(ptr: NonNull<Obj>) -> Self {
         Self(ptr)
     }
+
+    pub fn from_obj(obj: &mut Obj) -> Self {
+        unsafe { Self(NonNull::new_unchecked(&mut (*obj))) }
+    }
 }
 
 impl Deref for ObjRef {
