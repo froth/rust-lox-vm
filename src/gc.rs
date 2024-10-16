@@ -1,9 +1,6 @@
 use std::{hint::unreachable_unchecked, ptr::NonNull};
 
-use crate::types::{
-    obj::{LoxString, Obj},
-    obj_ref::ObjRef,
-};
+use crate::types::{obj::Obj, obj_ref::ObjRef, string::LoxString};
 
 pub struct Gc {
     head: Option<Box<Node>>,

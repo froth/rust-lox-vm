@@ -1,9 +1,10 @@
+use crate::types::Hashable;
 use std::ptr::NonNull;
 use std::{fmt::Write as _, mem};
 
 use tracing::debug;
 
-use crate::types::obj::LoxString;
+use crate::types::string::LoxString;
 use crate::types::value::Value;
 
 use super::memory;
@@ -61,7 +62,7 @@ impl HashTable {
     }
 
     fn find_entry(entries: NonNull<Entry>, capacity: u32, key: *const LoxString) -> *mut Entry {
-        let mut index: u32 = unsafe { (*key).hash } % capacity;
+        let mut index: u32 = unsafe { (*key).hash().0 } % capacity;
         loop {
             // SAFETY: we know this ends in valid memory of HashTable
             let entry = unsafe { entries.as_ptr().add(index as usize) };
