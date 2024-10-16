@@ -9,7 +9,7 @@ use crate::{
     op::Op,
     scanner::Scanner,
     token::{Precedence, Token, TokenType},
-    value::{Obj, Value},
+    types::{obj::Obj, value::Value},
 };
 
 pub struct Compiler<'a, 'gc> {

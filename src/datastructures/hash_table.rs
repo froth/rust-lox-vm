@@ -3,7 +3,8 @@ use std::{fmt::Write as _, mem};
 
 use tracing::debug;
 
-use crate::value::{LoxString, Value};
+use crate::types::obj::LoxString;
+use crate::types::value::Value;
 
 use super::memory;
 
@@ -143,7 +144,7 @@ struct Entry {
 #[cfg(test)]
 mod tests {
 
-    use crate::{gc::Gc, value::Obj};
+    use crate::{gc::Gc, types::obj::Obj};
 
     use super::*;
 

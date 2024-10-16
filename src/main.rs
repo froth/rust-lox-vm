@@ -1,8 +1,6 @@
 use args::Args;
 use clap::Parser as _;
-use datastructures::hash_table::HashTable;
 use error::InterpreterError;
-use gc::Gc;
 use miette::{IntoDiagnostic, NamedSource, Result};
 use rustyline::{
     error::ReadlineError, highlight::MatchingBracketHighlighter,
@@ -11,7 +9,6 @@ use rustyline::{
 use std::fs;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
-use value::{LoxString, Value};
 use vm::VM;
 
 mod args;
@@ -23,7 +20,7 @@ mod gc;
 mod op;
 mod scanner;
 mod token;
-mod value;
+mod types;
 mod vm;
 
 fn main() {

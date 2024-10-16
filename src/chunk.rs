@@ -1,7 +1,7 @@
 use miette::{NamedSource, SourceCode, SourceSpan};
 use std::fmt::{Error, Write as _};
 
-use crate::{datastructures::vector::LoxVector, op::Op, value::Value};
+use crate::{datastructures::vector::LoxVector, op::Op, types::value::Value};
 
 pub struct Chunk {
     // in original clox this is Vector<u8> this is more wasteful but way easier. Maybe benchmark in the future?

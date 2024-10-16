@@ -1,4 +1,4 @@
-use std::fmt::Write as _;
+use std::{fmt::Write as _, ops::Deref};
 
 use miette::{LabeledSpan, NamedSource};
 use tracing::debug;
@@ -9,7 +9,7 @@ use crate::{
     error::InterpreterError,
     gc::Gc,
     op::Op,
-    value::{Obj, Value},
+    types::{obj::Obj, value::Value},
 };
 
 const STACK_SIZE: usize = 256;
@@ -130,7 +130,7 @@ impl VM {
                 self.push(Value::Number(a + b));
             }
             (Value::Obj(a), Value::Obj(b)) => {
-                if let (Obj::String(a), Obj::String(b)) = unsafe { (a.as_ref(), b.as_ref()) } {
+                if let (Obj::String(a), Obj::String(b)) = (a.deref(), b.deref()) {
                     self.pop();
                     self.pop();
                     let concated = self.gc.manage(Obj::string(a.string.to_owned() + &b.string));
