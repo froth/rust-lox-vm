@@ -1,4 +1,4 @@
-use std::fmt::Write as _;
+use std::{fmt::Write as _, ops::Deref};
 
 use miette::{LabeledSpan, NamedSource};
 use tracing::debug;
@@ -9,7 +9,7 @@ use crate::{
     error::InterpreterError,
     gc::Gc,
     op::Op,
-    value::{Obj, Value},
+    types::{obj::Obj, value::Value},
 };
 
 const STACK_SIZE: usize = 256;
@@ -130,11 +130,17 @@ impl VM {
                 self.push(Value::Number(a + b));
             }
             (Value::Obj(a), Value::Obj(b)) => {
-                let (Obj::String(a), Obj::String(b)) = unsafe { (a.as_ref(), b.as_ref()) };
-                self.pop();
-                self.pop();
-                let concated = self.gc.manage(Obj::String(a.to_owned() + b));
-                self.push(Value::Obj(concated));
+                if let (Obj::String(a), Obj::String(b)) = (a.deref(), b.deref()) {
+                    self.pop();
+                    self.pop();
+                    let concated = self.gc.manage(Obj::string(a.string.to_owned() + &b.string));
+                    self.push(Value::Obj(concated));
+                } else {
+                    miette::bail!(
+                        labels = vec![LabeledSpan::at(chunk.locations[index], "here")],
+                        "Operands for operation must be both be numbers or Strings"
+                    )
+                }
             }
             _ => miette::bail!(
                 labels = vec![LabeledSpan::at(chunk.locations[index], "here")],

@@ -1,0 +1,11 @@
+pub mod obj;
+pub mod obj_ref;
+pub mod string;
+pub mod value;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Hash(pub u32);
+
+pub trait Hashable {
+    fn hash(&self) -> Hash;
+}

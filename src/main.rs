@@ -14,14 +14,13 @@ use vm::VM;
 mod args;
 mod chunk;
 mod compiler;
+mod datastructures;
 mod error;
 mod gc;
-mod lox_vector;
-mod memory;
 mod op;
 mod scanner;
 mod token;
-mod value;
+mod types;
 mod vm;
 
 fn main() {

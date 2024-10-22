@@ -1,6 +1,6 @@
-use std::ptr::NonNull;
+use std::{hint::unreachable_unchecked, ptr::NonNull};
 
-use crate::value::Obj;
+use crate::types::{obj::Obj, obj_ref::ObjRef, string::LoxString};
 
 pub struct Gc {
     head: Option<Box<Node>>,
@@ -16,7 +16,7 @@ impl Gc {
         Self { head: None }
     }
 
-    pub fn manage(&mut self, obj: Obj) -> NonNull<Obj> {
+    pub fn manage(&mut self, obj: Obj) -> ObjRef {
         let old_head = self.head.take();
         let mut new_node = Box::new(Node {
             next: old_head,
@@ -25,7 +25,19 @@ impl Gc {
         let ptr: *mut Obj = &mut new_node.obj;
         self.head = Some(new_node);
         // SAFETY: guaranteed to be not null
-        unsafe { NonNull::new_unchecked(ptr) }
+        ObjRef::new(unsafe { NonNull::new_unchecked(ptr) })
+    }
+
+    pub fn manage_string(&mut self, string: LoxString) -> ObjRef {
+        let old_head = self.head.take();
+        let obj = Obj::String(string);
+        let mut new_node = Box::new(Node {
+            next: old_head,
+            obj,
+        });
+        let obj_ref = ObjRef::from_obj(&mut new_node.obj);
+        self.head = Some(new_node);
+        obj_ref
     }
 }
 
@@ -41,19 +53,18 @@ impl Drop for Gc {
 #[cfg(test)]
 mod tests {
 
+    use std::ops::Deref;
+
     use super::*;
 
     #[test]
     fn push() {
         let mut gc = Gc::new();
-        let one = gc.manage(Obj::String("asfsaf".to_string()));
-        let one = unsafe { one.as_ref() };
-        assert_eq!(one, &Obj::String("asfsaf".to_string()));
-        let two = gc.manage(Obj::String("sfdsdfsaf".to_string()));
-        let two = unsafe { two.as_ref() };
-        assert_eq!(two, &Obj::String("sfdsdfsaf".to_string()));
-        let three = gc.manage(Obj::String("sfdsasdasddfsaf".to_string()));
-        let three = unsafe { three.as_ref() };
-        assert_eq!(three, &Obj::String("sfdsasdasddfsaf".to_string()));
+        let one = gc.manage(Obj::from_str("asfsaf"));
+        assert_eq!(one.deref(), &Obj::from_str("asfsaf"));
+        let two = gc.manage(Obj::from_str("sfdsdfsaf"));
+        assert_eq!(two.deref(), &Obj::from_str("sfdsdfsaf"));
+        let three = gc.manage(Obj::from_str("sfdsasdasddfsaf"));
+        assert_eq!(three.deref(), &Obj::from_str("sfdsasdasddfsaf"));
     }
 }

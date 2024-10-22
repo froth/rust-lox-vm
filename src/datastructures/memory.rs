@@ -11,6 +11,14 @@ pub fn grow_capacity(capacity: usize) -> usize {
     }
 }
 
+pub fn alloc_array<T>(new_capacity: usize) -> NonNull<T> {
+    reallocate(NonNull::dangling(), 0, new_capacity)
+}
+
+pub fn free_array<T>(pointer: NonNull<T>, old_capacity: usize) {
+    reallocate(pointer, old_capacity, 0);
+}
+
 pub fn reallocate<T>(pointer: NonNull<T>, old_capacity: usize, new_capacity: usize) -> NonNull<T> {
     let old_ptr = pointer.as_ptr() as *mut u8;
     let new_layout = Layout::array::<T>(new_capacity).unwrap();
