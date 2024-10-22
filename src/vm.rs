@@ -52,7 +52,7 @@ impl VM {
     pub fn interpret(
         &mut self,
         src: NamedSource<String>,
-    ) -> std::result::Result<Option<Value>, InterpreterError> {
+    ) -> std::result::Result<(), InterpreterError> {
         let chunk = match Compiler::compile(&src, &mut self.gc) {
             Ok(c) => c,
             Err(e) => return Err(InterpreterError::CompileError(e.with_source_code(src))),
@@ -67,11 +67,7 @@ impl VM {
         }
     }
 
-    fn interpret_inner(
-        &mut self,
-        src: &NamedSource<String>,
-        chunk: Chunk,
-    ) -> miette::Result<Option<Value>> {
+    fn interpret_inner(&mut self, src: &NamedSource<String>, chunk: Chunk) -> miette::Result<()> {
         for (i, op) in chunk.code.iter().enumerate() {
             debug!("{}", chunk.disassemble_at(src, i));
             debug!("          {}", self.trace_stack());
@@ -79,7 +75,7 @@ impl VM {
                 Op::Return => {
                     let res = self.pop();
                     println!("{}", res);
-                    return Ok(Some(res));
+                    return Ok(());
                 }
                 Op::Constant(index) => {
                     let constant = chunk.constants[*index as usize];

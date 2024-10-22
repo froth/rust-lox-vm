@@ -92,8 +92,7 @@ fn run_prompt(mut vm: VM, args: Args) -> rustyline::Result<()> {
             Ok(source) => {
                 rl.add_history_entry(source.as_str())?;
                 match vm.interpret(NamedSource::new("repl", source)) {
-                    Ok(Some(value)) => println!("expr => {}", value),
-                    Ok(None) => (),
+                    Ok(()) => (),
                     Err(InterpreterError::CompileError(err)) => println!("{:?}", err),
                     Err(InterpreterError::RuntimeError(err)) => println!("{:?}", err),
                 }
