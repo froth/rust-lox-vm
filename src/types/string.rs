@@ -12,17 +12,19 @@ impl LoxString {
     }
 
     pub fn string(string: String) -> Self {
-        const PRIME: u32 = 16777619;
-        let mut hash: u32 = 2166136261;
-        for b in string.bytes() {
-            hash ^= b as u32;
-            hash = hash.wrapping_mul(PRIME);
-        }
-        Self {
-            string,
-            hash: Hash(hash),
-        }
+        let hash = hash_str(&string);
+        Self { string, hash }
     }
+}
+
+pub fn hash_str(str: &str) -> Hash {
+    const PRIME: u32 = 16777619;
+    let mut hash: u32 = 2166136261;
+    for b in str.bytes() {
+        hash ^= b as u32;
+        hash = hash.wrapping_mul(PRIME);
+    }
+    Hash(hash)
 }
 
 impl Hashable for LoxString {

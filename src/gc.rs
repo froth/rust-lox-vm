@@ -1,9 +1,11 @@
-use std::{hint::unreachable_unchecked, ptr::NonNull};
-
-use crate::types::{obj::Obj, obj_ref::ObjRef, string::LoxString};
+use crate::{
+    datastructures::hash_table::HashTable,
+    types::{obj::Obj, obj_ref::ObjRef, string::LoxString, value::Value},
+};
 
 pub struct Gc {
     head: Option<Box<Node>>,
+    strings: HashTable,
 }
 
 struct Node {
@@ -13,30 +15,35 @@ struct Node {
 
 impl Gc {
     pub fn new() -> Self {
-        Self { head: None }
+        Self {
+            head: None,
+            strings: HashTable::new(),
+        }
     }
 
-    pub fn manage(&mut self, obj: Obj) -> ObjRef {
-        let old_head = self.head.take();
-        let mut new_node = Box::new(Node {
-            next: old_head,
-            obj,
-        });
-        let ptr: *mut Obj = &mut new_node.obj;
-        self.head = Some(new_node);
-        // SAFETY: guaranteed to be not null
-        ObjRef::new(unsafe { NonNull::new_unchecked(ptr) })
+    pub fn manage_string(&mut self, string: String) -> ObjRef {
+        self.strings
+            .find_string(&string)
+            .unwrap_or_else(|| self.manage_lox_string(LoxString::string(string)))
     }
 
-    pub fn manage_string(&mut self, string: LoxString) -> ObjRef {
+    pub fn manage_str(&mut self, string: &str) -> ObjRef {
+        self.strings
+            .find_string(string)
+            .unwrap_or_else(|| self.manage_lox_string(LoxString::from_str(string)))
+    }
+
+    fn manage_lox_string(&mut self, lox_string: LoxString) -> ObjRef {
+        let obj = Obj::String(lox_string);
         let old_head = self.head.take();
-        let obj = Obj::String(string);
         let mut new_node = Box::new(Node {
             next: old_head,
             obj,
         });
         let obj_ref = ObjRef::from_obj(&mut new_node.obj);
         self.head = Some(new_node);
+        // intern the string
+        self.strings.insert(Value::Obj(obj_ref), Value::Nil);
         obj_ref
     }
 }
@@ -53,18 +60,24 @@ impl Drop for Gc {
 #[cfg(test)]
 mod tests {
 
-    use std::ops::Deref;
-
     use super::*;
 
     #[test]
     fn push() {
         let mut gc = Gc::new();
-        let one = gc.manage(Obj::from_str("asfsaf"));
-        assert_eq!(one.deref(), &Obj::from_str("asfsaf"));
-        let two = gc.manage(Obj::from_str("sfdsdfsaf"));
-        assert_eq!(two.deref(), &Obj::from_str("sfdsdfsaf"));
-        let three = gc.manage(Obj::from_str("sfdsasdasddfsaf"));
-        assert_eq!(three.deref(), &Obj::from_str("sfdsasdasddfsaf"));
+        let one = gc.manage_str("asfsaf");
+        assert_eq!(*one, Obj::String(LoxString::from_str("asfsaf")));
+        let two = gc.manage_str("sfdsdfsaf");
+        assert_eq!(*two, Obj::String(LoxString::from_str("sfdsdfsaf")));
+        let three = gc.manage_str("sfdsasdasddfsaf");
+        assert_eq!(*three, Obj::String(LoxString::from_str("sfdsasdasddfsaf")));
+    }
+
+    #[test]
+    fn string_interning() {
+        let mut gc = Gc::new();
+        let one = gc.manage_str("asfsaf");
+        let two = gc.manage_str("asfsaf");
+        assert_eq!(one, two);
     }
 }
