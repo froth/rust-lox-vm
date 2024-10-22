@@ -1,10 +1,7 @@
 use crate::types::Hashable;
+use std::fmt::Write as _;
 use std::ptr::NonNull;
-use std::{fmt::Write as _, mem};
 
-use tracing::debug;
-
-use crate::types::string::LoxString;
 use crate::types::value::Value;
 
 use super::memory;
@@ -38,16 +35,15 @@ impl HashTable {
 
         let entry = Self::find_entry(self.entries, self.capacity, key);
         //SAFETY: we are sure the pointer points into valid HashTable memory
-        let is_new_key = unsafe { (*entry).key.is_none() };
-        if is_new_key && unsafe { !(*entry).is_tombstone() } {
-            self.count += 1;
-        }
-        //SAFETY: we are sure the pointer points into valid HashTable memory
         unsafe {
+            let is_new_key = (*entry).key.is_none();
+            if is_new_key && !(*entry).is_tombstone() {
+                self.count += 1;
+            }
             (*entry).key = Some(key);
             (*entry).value = value;
+            is_new_key
         }
-        is_new_key
     }
 
     pub fn get(&self, key: Value) -> Option<Value> {
@@ -193,7 +189,7 @@ impl Entry {
 #[cfg(test)]
 mod tests {
 
-    use crate::gc::Gc;
+    use crate::{gc::Gc, types::string::LoxString};
 
     use super::*;
 
