@@ -37,7 +37,7 @@ fn hash_float(n: f64) -> Hash {
     }
     let union = MyUnion { float: n + 1.0 };
     // SAFETY: for hashing purposes this works fine
-    unsafe { Hash(union.ints[0] + union.ints[1]) }
+    unsafe { Hash(union.ints[0].wrapping_add(union.ints[1])) }
 }
 
 impl Display for Value {

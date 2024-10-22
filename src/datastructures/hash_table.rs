@@ -37,10 +37,12 @@ impl HashTable {
         }
 
         let entry = Self::find_entry(self.entries, self.capacity, key);
+        //SAFETY: we are sure the pointer points into valid HashTable memory
         let is_new_key = unsafe { (*entry).key.is_none() };
-        if is_new_key {
+        if is_new_key && unsafe { !(*entry).is_tombstone() } {
             self.count += 1;
         }
+        //SAFETY: we are sure the pointer points into valid HashTable memory
         unsafe {
             (*entry).key = Some(key);
             (*entry).value = value;
@@ -54,21 +56,58 @@ impl HashTable {
         }
 
         let entry = Self::find_entry(self.entries, self.capacity, key);
-        if unsafe { (*entry).key.is_some() } {
-            Some(unsafe { (*entry).value })
-        } else {
-            None
+        //SAFETY: we are sure the pointer points into valid HashTable memory
+        unsafe {
+            if (*entry).key.is_some() {
+                Some((*entry).value)
+            } else {
+                None
+            }
+        }
+    }
+
+    pub fn delete(&mut self, key: Value) -> bool {
+        if self.capacity == 0 {
+            return false;
+        }
+        let entry = Self::find_entry(self.entries, self.capacity, key);
+        unsafe {
+            if (*entry).key.is_none() {
+                false
+            } else {
+                (*entry).make_tombstone();
+                true
+            }
+        }
+    }
+
+    pub fn add_all(&mut self, from: &Self) {
+        for i in 0..from.capacity {
+            unsafe {
+                let entry = from.entries.as_ptr().add(i as usize);
+                if let Some(key) = (*entry).key {
+                    self.insert(key, (*entry).value);
+                }
+            }
         }
     }
 
     fn find_entry(entries: NonNull<Entry>, capacity: u32, key: Value) -> *mut Entry {
         let mut index: u32 = key.hash().0 % capacity;
+        let mut tombstone = None;
         loop {
             // SAFETY: we know this ends in valid memory of HashTable
-            let entry = unsafe { entries.as_ptr().add(index as usize) };
-            let found_key = unsafe { (*entry).key };
-            if found_key.is_none() || found_key.is_some_and(|k| k == key) {
-                return entry;
+            unsafe {
+                let entry = entries.as_ptr().add(index as usize);
+                if let Some(entry_key) = (*entry).key {
+                    if entry_key == key {
+                        return entry;
+                    }
+                } else if (*entry).is_tombstone() {
+                    tombstone.get_or_insert(entry);
+                } else {
+                    return tombstone.unwrap_or(entry);
+                }
             }
             index = (index.wrapping_add(1)) % capacity
         }
@@ -140,10 +179,21 @@ struct Entry {
     value: Value,
 }
 
+impl Entry {
+    fn make_tombstone(&mut self) {
+        self.key = None;
+        self.value = Value::Boolean(true)
+    }
+
+    fn is_tombstone(&self) -> bool {
+        self.key.is_none() && self.value == Value::Boolean(true)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
-    use crate::{gc::Gc, types::obj::Obj};
+    use crate::gc::Gc;
 
     use super::*;
 
@@ -172,8 +222,10 @@ mod tests {
         let mut table: HashTable = HashTable::new();
         let key1 = Value::Boolean(true);
         let key2 = Value::Boolean(false);
-        table.insert(key1, Value::Boolean(true));
-        table.insert(key2, Value::Boolean(false));
+        let inserted = table.insert(key1, Value::Boolean(true));
+        assert!(inserted);
+        let inserted = table.insert(key2, Value::Boolean(false));
+        assert!(inserted);
         assert_eq!(table.capacity, 8);
         assert_eq!(table.count, 2);
         let ret = table.get(key1);
@@ -189,11 +241,114 @@ mod tests {
         for i in 0..2049 {
             let obj_ref = gc.manage_string(LoxString::string(format!("key{}", i)));
             let key = Value::Obj(obj_ref);
-            table.insert(key, Value::Number(f64::from(i)));
+            let inserted = table.insert(key, Value::Number(f64::from(i)));
+            assert!(inserted);
             let ret = table.get(key);
             assert_eq!(ret, Some(Value::Number(f64::from(i))));
         }
         assert_eq!(table.count, 2049);
         assert_eq!(table.capacity, 4096);
+    }
+
+    #[test]
+    fn do_not_copy_tombstones_on_growth() {
+        let mut gc = Gc::new();
+        let mut table: HashTable = HashTable::new();
+        for i in 0..5 {
+            let obj_ref = gc.manage_string(LoxString::string(format!("key{}", i)));
+            let key = Value::Obj(obj_ref);
+            table.insert(key, Value::Number(f64::from(i)));
+            table.delete(key);
+        }
+        assert_eq!(table.count, 5);
+        assert_eq!(table.capacity, 8);
+        for i in 6..14 {
+            let obj_ref = gc.manage_string(LoxString::string(format!("key{}", i)));
+            let key = Value::Obj(obj_ref);
+            table.insert(key, Value::Number(f64::from(i)));
+        }
+        assert_eq!(table.count, 8);
+        assert_eq!(table.capacity, 16);
+    }
+
+    #[test]
+    fn handle_tombstones_correctly() {
+        let mut gc = Gc::new();
+        // all those keys have hash % 8 == 2
+        let key1 = Value::Obj(gc.manage_string(LoxString::string("3".to_string())));
+        let value1 = Value::Number(1.0);
+        let key2 = Value::Obj(gc.manage_string(LoxString::string("12".to_string())));
+        let value2 = Value::Number(2.0);
+        let key3 = Value::Obj(gc.manage_string(LoxString::string("23".to_string())));
+        let value3 = Value::Number(3.0);
+
+        // has hash % 8 == 3
+        let key4 = Value::Obj(gc.manage_string(LoxString::string("key5".to_string())));
+        let value4 = Value::Number(4.0);
+        let mut table: HashTable = HashTable::new();
+
+        table.insert(key1, value1);
+        table.insert(key2, value2);
+        table.insert(key3, value3);
+        assert_eq!(table.count, 3);
+
+        table.delete(key2);
+        assert!(table.get(key2).is_none());
+        assert_eq!(table.get(key3), Some(value3));
+        assert_eq!(table.count, 3);
+
+        table.insert(key4, value4);
+        assert!(table.get(key2).is_none());
+        assert_eq!(table.get(key3), Some(value3));
+        assert_eq!(table.get(key4), Some(value4));
+        assert_eq!(table.count, 3);
+    }
+
+    #[test]
+    fn add_all() {
+        let mut gc = Gc::new();
+        let mut from: HashTable = HashTable::new();
+        for i in 0..2049 {
+            let obj_ref = gc.manage_string(LoxString::string(format!("key{}", i)));
+            let key = Value::Obj(obj_ref);
+            from.insert(key, Value::Number(f64::from(i)));
+        }
+
+        let mut to = HashTable::new();
+        to.add_all(&from);
+        assert_eq!(from.count, to.count);
+        assert_eq!(from.capacity, to.capacity);
+    }
+
+    #[test]
+    fn delete_existing() {
+        let mut table = HashTable::new();
+        let key = Value::Boolean(true);
+        table.insert(key, Value::Boolean(true));
+
+        let deleted = table.delete(key);
+        assert!(deleted);
+        assert_eq!(table.count, 1) // tombstone
+    }
+
+    #[test]
+    fn delete_on_empty() {
+        let mut table = HashTable::new();
+        let key = Value::Boolean(true);
+
+        let deleted = table.delete(key);
+        assert!(!deleted);
+        assert_eq!(table.count, 0)
+    }
+
+    #[test]
+    fn delete_not_existing() {
+        let mut table = HashTable::new();
+        let key = Value::Boolean(true);
+        table.insert(Value::Boolean(false), Value::Boolean(false));
+
+        let deleted = table.delete(key);
+        assert!(!deleted);
+        assert_eq!(table.count, 1)
     }
 }
