@@ -17,16 +17,6 @@ impl Hashable for Obj {
     }
 }
 
-impl Obj {
-    pub fn from_str(s: &str) -> Self {
-        Self::String(LoxString::string(s.to_owned()))
-    }
-
-    pub fn string(string: String) -> Self {
-        Self::String(LoxString::string(string))
-    }
-}
-
 impl Display for Obj {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

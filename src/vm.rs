@@ -133,7 +133,7 @@ impl VM {
                 if let (Obj::String(a), Obj::String(b)) = (a.deref(), b.deref()) {
                     self.pop();
                     self.pop();
-                    let concated = self.gc.manage(Obj::string(a.string.to_owned() + &b.string));
+                    let concated = self.gc.manage_string(a.string.to_owned() + &b.string);
                     self.push(Value::Obj(concated));
                 } else {
                     miette::bail!(

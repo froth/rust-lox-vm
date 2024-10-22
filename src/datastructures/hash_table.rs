@@ -1,10 +1,10 @@
+use crate::types::obj::Obj;
+use crate::types::obj_ref::ObjRef;
+use crate::types::string::hash_str;
 use crate::types::Hashable;
+use std::fmt::Write as _;
 use std::ptr::NonNull;
-use std::{fmt::Write as _, mem};
 
-use tracing::debug;
-
-use crate::types::string::LoxString;
 use crate::types::value::Value;
 
 use super::memory;
@@ -38,16 +38,15 @@ impl HashTable {
 
         let entry = Self::find_entry(self.entries, self.capacity, key);
         //SAFETY: we are sure the pointer points into valid HashTable memory
-        let is_new_key = unsafe { (*entry).key.is_none() };
-        if is_new_key && unsafe { !(*entry).is_tombstone() } {
-            self.count += 1;
-        }
-        //SAFETY: we are sure the pointer points into valid HashTable memory
         unsafe {
+            let is_new_key = (*entry).key.is_none();
+            if is_new_key && !(*entry).is_tombstone() {
+                self.count += 1;
+            }
             (*entry).key = Some(key);
             (*entry).value = value;
+            is_new_key
         }
-        is_new_key
     }
 
     pub fn get(&self, key: Value) -> Option<Value> {
@@ -100,6 +99,7 @@ impl HashTable {
             unsafe {
                 let entry = entries.as_ptr().add(index as usize);
                 if let Some(entry_key) = (*entry).key {
+                    // this does pointer equality for all Obj, this only works because all Strings are interned
                     if entry_key == key {
                         return entry;
                     }
@@ -110,6 +110,31 @@ impl HashTable {
                 }
             }
             index = (index.wrapping_add(1)) % capacity
+        }
+    }
+
+    // only for string interning
+    pub fn find_string(&self, string: &str) -> Option<ObjRef> {
+        if self.count == 0 {
+            return None;
+        }
+        let mut index = hash_str(string).0 % self.capacity;
+        loop {
+            // SAFETY: we know this ends in valid memory of HashTable
+            unsafe {
+                let entry = self.entries.as_ptr().add(index as usize);
+                if let Some(Value::Obj(obj_ref)) = (*entry).key {
+                    let obj = &(*obj_ref);
+                    if let Obj::String(s) = obj {
+                        if s.string.eq(string) {
+                            return Some(obj_ref);
+                        }
+                    }
+                } else if !(*entry).is_tombstone() {
+                    return None;
+                }
+            }
+            index = (index.wrapping_add(1)) % self.capacity;
         }
     }
 
@@ -239,7 +264,7 @@ mod tests {
         let mut gc = Gc::new();
         let mut table: HashTable = HashTable::new();
         for i in 0..2049 {
-            let obj_ref = gc.manage_string(LoxString::string(format!("key{}", i)));
+            let obj_ref = gc.manage_string(format!("key{}", i));
             let key = Value::Obj(obj_ref);
             let inserted = table.insert(key, Value::Number(f64::from(i)));
             assert!(inserted);
@@ -255,7 +280,7 @@ mod tests {
         let mut gc = Gc::new();
         let mut table: HashTable = HashTable::new();
         for i in 0..5 {
-            let obj_ref = gc.manage_string(LoxString::string(format!("key{}", i)));
+            let obj_ref = gc.manage_string(format!("key{}", i));
             let key = Value::Obj(obj_ref);
             table.insert(key, Value::Number(f64::from(i)));
             table.delete(key);
@@ -263,7 +288,7 @@ mod tests {
         assert_eq!(table.count, 5);
         assert_eq!(table.capacity, 8);
         for i in 6..14 {
-            let obj_ref = gc.manage_string(LoxString::string(format!("key{}", i)));
+            let obj_ref = gc.manage_string(format!("key{}", i));
             let key = Value::Obj(obj_ref);
             table.insert(key, Value::Number(f64::from(i)));
         }
@@ -275,15 +300,15 @@ mod tests {
     fn handle_tombstones_correctly() {
         let mut gc = Gc::new();
         // all those keys have hash % 8 == 2
-        let key1 = Value::Obj(gc.manage_string(LoxString::string("3".to_string())));
+        let key1 = Value::Obj(gc.manage_string("3".to_string()));
         let value1 = Value::Number(1.0);
-        let key2 = Value::Obj(gc.manage_string(LoxString::string("12".to_string())));
+        let key2 = Value::Obj(gc.manage_string("12".to_string()));
         let value2 = Value::Number(2.0);
-        let key3 = Value::Obj(gc.manage_string(LoxString::string("23".to_string())));
+        let key3 = Value::Obj(gc.manage_string("23".to_string()));
         let value3 = Value::Number(3.0);
 
         // has hash % 8 == 3
-        let key4 = Value::Obj(gc.manage_string(LoxString::string("key5".to_string())));
+        let key4 = Value::Obj(gc.manage_string("key5".to_string()));
         let value4 = Value::Number(4.0);
         let mut table: HashTable = HashTable::new();
 
@@ -305,11 +330,32 @@ mod tests {
     }
 
     #[test]
+    fn find_str() {
+        let mut gc = Gc::new();
+        // all those keys have hash % 8 == 2
+        let key1 = Value::Obj(gc.manage_string("3".to_string()));
+        let value1 = Value::Number(1.0);
+        let key2_obj = gc.manage_string("12".to_string());
+        let key2 = Value::Obj(key2_obj);
+        let value2 = Value::Number(2.0);
+        let key3 = Value::Obj(gc.manage_string("23".to_string()));
+        let value3 = Value::Number(3.0);
+
+        let mut table: HashTable = HashTable::new();
+
+        table.insert(key1, value1);
+        table.insert(key2, value2);
+        table.insert(key3, value3);
+
+        let res = table.find_string("12").unwrap();
+        assert_eq!(res, key2_obj);
+    }
+    #[test]
     fn add_all() {
         let mut gc = Gc::new();
         let mut from: HashTable = HashTable::new();
         for i in 0..2049 {
-            let obj_ref = gc.manage_string(LoxString::string(format!("key{}", i)));
+            let obj_ref = gc.manage_string(format!("key{}", i));
             let key = Value::Obj(obj_ref);
             from.insert(key, Value::Number(f64::from(i)));
         }
