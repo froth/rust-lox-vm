@@ -1,15 +1,17 @@
+use std::ptr::NonNull;
+
 use crate::{
     datastructures::hash_table::HashTable,
     types::{obj::Obj, obj_ref::ObjRef, string::LoxString, value::Value},
 };
 
 pub struct Gc {
-    head: Option<Box<Node>>,
+    head: Option<NonNull<Node>>,
     strings: HashTable,
 }
 
 struct Node {
-    next: Option<Box<Node>>,
+    next: Option<NonNull<Node>>,
     obj: Obj,
 }
 
@@ -34,25 +36,31 @@ impl Gc {
     }
 
     fn manage_lox_string(&mut self, lox_string: LoxString) -> ObjRef {
-        let obj = Obj::String(lox_string);
-        let old_head = self.head.take();
-        let mut new_node = Box::new(Node {
-            next: old_head,
-            obj,
-        });
-        let obj_ref = ObjRef::from_obj(&mut new_node.obj);
-        self.head = Some(new_node);
-        // intern the string
-        self.strings.insert(Value::Obj(obj_ref), Value::Nil);
-        obj_ref
+        unsafe {
+            let obj = Obj::String(lox_string);
+            let old_head = self.head.take();
+            let new_node = Box::into_raw(Box::new(Node {
+                next: old_head,
+                obj,
+            }));
+            let new_node = NonNull::new_unchecked(new_node);
+            let obj_ptr: *mut Obj = &mut (*new_node.as_ptr()).obj;
+            let obj_ref = ObjRef::new(NonNull::new_unchecked(obj_ptr));
+            self.head = Some(new_node);
+            // intern the string
+            self.strings.insert(Value::Obj(obj_ref), Value::Nil);
+            obj_ref
+        }
     }
 }
 
 impl Drop for Gc {
     fn drop(&mut self) {
-        let mut cur_link = self.head.take();
-        while let Some(mut boxed_node) = cur_link {
-            cur_link = boxed_node.next.take();
+        unsafe {
+            let mut cur_link = self.head.take();
+            while let Some(boxed_node) = cur_link {
+                cur_link = Box::from_raw(boxed_node.as_ptr()).next.take();
+            }
         }
     }
 }

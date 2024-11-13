@@ -6,8 +6,8 @@ use super::obj::Obj;
 pub struct ObjRef(NonNull<Obj>);
 
 impl ObjRef {
-    pub fn from_obj(obj: &mut Obj) -> Self {
-        unsafe { Self(NonNull::new_unchecked(&mut (*obj))) }
+    pub fn new(ptr: NonNull<Obj>) -> Self {
+        ObjRef(ptr)
     }
 }
 
