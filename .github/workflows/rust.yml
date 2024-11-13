@@ -24,3 +24,7 @@ jobs:
       run: cargo test --verbose
     - name: Run fmt
       run: cargo fmt --check
+    - name: Run miri
+      run: |
+        rustup +nightly component add miri
+        cargo +nightly miri test
