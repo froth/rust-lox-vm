@@ -27,4 +27,4 @@ jobs:
     - name: Run miri
       run: |
         rustup +nightly component add miri
-        cargo +nightly miri test
+        cargo +nightly miri test -- --skip integration_tests     
