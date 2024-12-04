@@ -9,6 +9,7 @@ use crate::{
     error::InterpreterError,
     gc::Gc,
     op::Op,
+    printer::{ConsolePrinter, Printer},
     types::{obj::Obj, value::Value},
 };
 
@@ -18,6 +19,7 @@ pub struct VM {
     stack: Box<[Value; STACK_SIZE]>,
     stack_top: *mut Value,
     gc: Gc,
+    printer: Box<dyn Printer>,
 }
 
 macro_rules! binary_operator {
@@ -46,6 +48,7 @@ impl VM {
             stack,
             stack_top,
             gc,
+            printer: Box::new(ConsolePrinter),
         }
     }
 
@@ -111,7 +114,7 @@ impl VM {
                 Op::Less => binary_operator!(self, chunk,i, <, Value::Boolean),
                 Op::Print => {
                     let res = self.pop();
-                    println!("{}", res);
+                    self.printer.print(res);
                     return Ok(());
                 }
             }
@@ -182,5 +185,56 @@ impl VM {
 
     fn reset_stack(&mut self) {
         self.stack_top = self.stack.as_mut_ptr();
+    }
+}
+
+#[cfg(test)]
+mod lox_tests {
+    use datadriven::walk;
+    use miette::NamedSource;
+    use serde_json::Value;
+
+    use crate::printer::{vec_printer::VecPrinter, Printer};
+
+    use super::VM;
+
+    impl VM {
+        pub fn with_printer(printer: Box<dyn Printer>) -> Self {
+            let mut vm = VM::new();
+            vm.printer = printer;
+            vm
+        }
+    }
+    #[test]
+    fn integration_tests() {
+        walk("tests/", |f| {
+            let file_name = f.filename.clone();
+            f.run(|test_case| -> String {
+                let input = test_case.input.to_string();
+                let printer = VecPrinter::new();
+                let mut vm = VM::with_printer(Box::new(printer.clone()));
+                let named_source = NamedSource::new(file_name.clone(), input.clone());
+                let result = vm.interpret(named_source);
+                if test_case.directive == "error" {
+                    let err = result.expect_err(
+                        format!("Test {file_name} meant to be failing but succeeded").as_str(),
+                    );
+                    let handler = miette::JSONReportHandler::new();
+                    let mut json = String::new();
+                    handler.render_report(&mut json, &err).unwrap();
+                    format_json(json)
+                } else {
+                    result.unwrap_or_else(|_| {
+                        panic!("Test {file_name} meant to be succeeding but failed.")
+                    });
+                    printer.get_output()
+                }
+            })
+        });
+    }
+
+    fn format_json(json: String) -> String {
+        let x: Value = serde_json::from_str(json.as_str()).unwrap();
+        serde_json::to_string_pretty(&x).unwrap()
     }
 }

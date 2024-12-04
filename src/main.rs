@@ -18,6 +18,7 @@ mod datastructures;
 mod error;
 mod gc;
 mod op;
+mod printer;
 mod scanner;
 mod token;
 mod types;
