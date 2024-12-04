@@ -1,4 +1,4 @@
-use miette::{ByteOffset, LabeledSpan, NamedSource, Result, SourceSpan};
+use miette::{ByteOffset, Diagnostic, Error, LabeledSpan, NamedSource, Report, Result, SourceSpan};
 use tracing::debug;
 
 use crate::{
@@ -17,6 +17,14 @@ pub struct Compiler<'a, 'gc> {
     eof: ByteOffset,
     chunk: Chunk,
     gc: &'gc mut Gc,
+    errors: Vec<Report>,
+}
+
+#[derive(thiserror::Error, Debug, Diagnostic)]
+#[error("Errors while parsing")]
+pub struct ParseErrors {
+    #[related]
+    pub parser_errors: Vec<Report>,
 }
 
 impl<'a, 'gc> Compiler<'a, 'gc> {
@@ -28,6 +36,7 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
             eof,
             chunk: Chunk::new(),
             gc,
+            errors: vec![],
         }
     }
 
@@ -38,19 +47,52 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
             compiler.declaration()?;
         }
         debug!("\n{}", compiler.chunk.disassemble(src));
-        Ok(compiler.chunk)
+        if compiler.errors.is_empty() {
+            Ok(compiler.chunk)
+        } else {
+            Err(ParseErrors {
+                parser_errors: compiler.errors,
+            })?
+        }
+    }
+
+    fn synchronize(&mut self) {
+        while let Some(token) = self.scanner.peek() {
+            if let Ok(token) = token {
+                match token.token_type {
+                    TokenType::Semicolon => {
+                        let _ = self.advance();
+                        return;
+                    }
+                    TokenType::Class
+                    | TokenType::Fun
+                    | TokenType::Var
+                    | TokenType::For
+                    | TokenType::If
+                    | TokenType::While
+                    | TokenType::Print => return,
+                    _ => (),
+                }
+            }
+            let _ = self.advance();
+        }
     }
 
     fn declaration(&mut self) -> Result<()> {
-        self.statement()
+        let res = self.statement();
+        if let Err(err) = res {
+            self.errors.push(err);
+            self.synchronize();
+        }
+        Ok(())
     }
 
     fn statement(&mut self) -> Result<()> {
         if let Some(print) = match_token!(self.scanner, TokenType::Print) {
-            return self.print_statement(print?.location);
-        };
-        // if match(TokenPrint)
-        todo!()
+            self.print_statement(print?.location)
+        } else {
+            self.expression_statement()
+        }
     }
 
     fn print_statement(&mut self, location: SourceSpan) -> Result<()> {
@@ -58,6 +100,13 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
         consume!(self, TokenType::Semicolon, "Expected ';' after value");
 
         self.chunk.write(Op::Print, location);
+        Ok(())
+    }
+
+    fn expression_statement(&mut self) -> Result<()> {
+        self.expression()?;
+        let location = consume!(self, TokenType::Semicolon, "Expected ';' after value");
+        self.chunk.write(Op::Pop, location);
         Ok(())
     }
 

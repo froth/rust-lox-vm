@@ -26,7 +26,7 @@ macro_rules! consume {
     ($self:expr, $pattern:pat $(if $guard:expr)?, $err_create: expr) => {{
         let token = $self.advance().map_err(|e| e.wrap_err($err_create))?;
         match token.token_type {
-            $pattern $(if $guard)? => (),
+            $pattern $(if $guard)? => token.location,
             _ => {
                 #[allow(clippy::redundant_closure_call)] return Err(miette::miette!(
                     labels = vec![LabeledSpan::at(token.location, "here")],

@@ -1,0 +1,47 @@
+error
+1 + ; 2 + + class
+----
+----
+{
+  "causes": [],
+  "filename": "",
+  "labels": [],
+  "message": "Parser Error",
+  "related": [
+    {
+      "causes": [],
+      "filename": "tests/synchronization_works.lox",
+      "labels": [
+        {
+          "label": "here",
+          "span": {
+            "length": 1,
+            "offset": 4
+          }
+        }
+      ],
+      "message": "Expected expression but got `;`",
+      "related": [],
+      "severity": "error"
+    },
+    {
+      "causes": [],
+      "filename": "tests/synchronization_works.lox",
+      "labels": [
+        {
+          "label": "here",
+          "span": {
+            "length": 5,
+            "offset": 12
+          }
+        }
+      ],
+      "message": "Expected expression but got `class`",
+      "related": [],
+      "severity": "error"
+    }
+  ],
+  "severity": "error"
+}
+----
+---- (no newline)
