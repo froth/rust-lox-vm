@@ -73,9 +73,7 @@ impl VM {
             debug!("          {}", self.trace_stack());
             match op {
                 Op::Return => {
-                    let res = self.pop();
-                    println!("{}", res);
-                    return Ok(());
+                    todo!()
                 }
                 Op::Constant(index) => {
                     let constant = chunk.constants[*index as usize];
@@ -111,6 +109,11 @@ impl VM {
                 }
                 Op::Greater => binary_operator!(self, chunk,i, >, Value::Boolean),
                 Op::Less => binary_operator!(self, chunk,i, <, Value::Boolean),
+                Op::Print => {
+                    let res = self.pop();
+                    println!("{}", res);
+                    return Ok(());
+                }
             }
         }
         Err(miette::miette! {

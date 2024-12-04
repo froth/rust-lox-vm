@@ -5,6 +5,7 @@ use crate::{
     chunk::Chunk,
     consume,
     gc::Gc,
+    match_token,
     op::Op,
     scanner::Scanner,
     token::{Precedence, Token, TokenType},
@@ -32,25 +33,36 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
 
     pub fn compile(src: &'a NamedSource<String>, gc: &'gc mut Gc) -> Result<Chunk> {
         let mut compiler = Compiler::new(src, gc);
-        compiler.expression()?;
-        match compiler.scanner.next() {
-            Some(res) => {
-                let token = res?;
-                miette::bail!(
-                    labels = vec![LabeledSpan::at(token.location, "here")],
-                    "Expected end of expression but got {:?}",
-                    token.token_type
-                )
-            }
-            None => {
-                compiler.chunk.write(
-                    crate::op::Op::Return,
-                    SourceSpan::new(compiler.eof.into(), 0),
-                );
-                debug!("\n{}", compiler.chunk.disassemble(src));
-                Ok(compiler.chunk)
-            }
+
+        while compiler.scanner.peek().is_some() {
+            compiler.declaration()?;
         }
+        debug!("\n{}", compiler.chunk.disassemble(src));
+        Ok(compiler.chunk)
+    }
+
+    fn declaration(&mut self) -> Result<()> {
+        self.statement()
+    }
+
+    fn statement(&mut self) -> Result<()> {
+        if let Some(print) = match_token!(self.scanner, TokenType::Print) {
+            return self.print_statement(print?.location);
+        };
+        // if match(TokenPrint)
+        todo!()
+    }
+
+    fn print_statement(&mut self, location: SourceSpan) -> Result<()> {
+        self.expression()?;
+        consume!(self, TokenType::Semicolon, "Expected ';' after value");
+
+        self.chunk.write(Op::Print, location);
+        Ok(())
+    }
+
+    fn expression(&mut self) -> Result<()> {
+        self.parse_precedence(Precedence::Assignment)
     }
 
     // parse everything at the given precedence or higher
@@ -72,6 +84,15 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
         }
 
         Ok(())
+    }
+
+    fn advance(&mut self) -> Result<Token<'a>> {
+        self.scanner.next().unwrap_or_else(|| {
+            miette::bail!(
+                labels = vec![LabeledSpan::at_offset(self.eof, "here")],
+                "Unexpected EOF"
+            )
+        })
     }
 
     fn peek_infix_precedence(&mut self) -> Result<Precedence> {
@@ -157,19 +178,13 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
         Ok(())
     }
 
-    fn expression(&mut self) -> Result<()> {
-        self.parse_precedence(Precedence::Assignment)
-    }
-
     fn grouping(&mut self) -> Result<()> {
         self.expression()?;
         consume!(
             self.scanner,
             TokenType::RightParen,
-            |token: Token<'a>| miette::miette!(
-                labels = vec![LabeledSpan::at(token.location, "here")],
-                "Expected ')' after Expression"
-            )
-        )
+            "Expected ')' after Expression"
+        );
+        Ok(())
     }
 }

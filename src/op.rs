@@ -17,4 +17,5 @@ pub enum Op {
     Equal,
     Greater,
     Less,
+    Print,
 }
