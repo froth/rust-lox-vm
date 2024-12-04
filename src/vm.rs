@@ -115,13 +115,13 @@ impl VM {
                 Op::Print => {
                     let res = self.pop();
                     self.printer.print(res);
-                    return Ok(());
+                }
+                Op::Pop => {
+                    self.pop();
                 }
             }
         }
-        Err(miette::miette! {
-            "Unexpected end of bytecode"
-        })
+        Ok(())
     }
 
     fn plus_operator(&mut self, chunk: &Chunk, index: usize) -> miette::Result<()> {

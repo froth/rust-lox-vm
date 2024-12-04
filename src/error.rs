@@ -3,8 +3,10 @@ use thiserror::Error;
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum InterpreterError {
-    #[error("Oops compiler blew up")]
+    #[diagnostic(transparent)]
+    #[error("Parser Error")]
     CompileError(Report),
+    #[diagnostic(transparent)]
     #[error("Oops vm blew up")]
     RuntimeError(Report),
 }

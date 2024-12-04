@@ -18,4 +18,5 @@ pub enum Op {
     Greater,
     Less,
     Print,
+    Pop,
 }
