@@ -1,6 +1,6 @@
 use crate::token::{Token, TokenType};
 
-use miette::{Diagnostic, NamedSource, Result, SourceSpan};
+use miette::{Diagnostic, LabeledSpan, NamedSource, Result, SourceSpan};
 
 #[derive(thiserror::Error, Debug, Diagnostic)]
 pub enum ScannerError {
@@ -21,12 +21,39 @@ pub enum ScannerError {
         location: SourceSpan,
     },
 }
+#[macro_export]
+macro_rules! consume {
+    ($self:expr, $pattern:pat $(if $guard:expr)?, $err_create: expr) => {{
+        let token = $self.advance()?;
+        match token.token_type {
+            $pattern $(if $guard)? => Ok(()),
+            _ => {
+                #[allow(clippy::redundant_closure_call)] return Err($err_create(token));
+            }
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! match_token {
+    ($self:expr, $pattern:pat $(if $guard:expr)?) => {{
+        match $self.peek() {
+            Some(Err(_)) => $self.next(),
+            Some(Ok(a)) => match a.token_type {
+                $pattern $(if $guard)? => $self.next(),
+                _ => None
+            },
+            None => None,
+        }
+    }};
+}
 
 pub struct Scanner<'a> {
     src: &'a NamedSource<String>,
     rest: &'a str,
     start: usize,
     at: usize,
+    peeked: Option<Result<Token<'a>>>,
 }
 
 impl<'a> Scanner<'a> {
@@ -36,10 +63,31 @@ impl<'a> Scanner<'a> {
             rest: src.inner().as_str(),
             start: 0,
             at: 0,
+            peeked: None,
         }
     }
 
-    fn advance(&mut self) -> Option<char> {
+    pub fn eof_offset(&self) -> usize {
+        self.src.inner().len().saturating_sub(1)
+    }
+
+    pub fn peek(&mut self) -> Option<&Result<Token<'a>>> {
+        if self.peeked.is_none() {
+            self.peeked = self.next();
+        }
+        self.peeked.as_ref()
+    }
+
+    pub fn advance(&mut self) -> Result<Token<'a>> {
+        self.next().unwrap_or_else(|| {
+            miette::bail!(
+                labels = vec![LabeledSpan::at_offset(self.eof_offset(), "here")],
+                "Unexpected EOF"
+            )
+        })
+    }
+
+    fn inner_advance(&mut self) -> Option<char> {
         if let Some(char) = self.rest.chars().next() {
             self.at += char.len_utf8();
             self.rest = &self.rest[char.len_utf8()..];
@@ -60,7 +108,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn peek(&self) -> Option<char> {
+    fn inner_peek(&self) -> Option<char> {
         self.rest.chars().next()
     }
 
@@ -70,10 +118,10 @@ impl<'a> Scanner<'a> {
 
     fn skip_whitespace_and_comments(&mut self) {
         loop {
-            if let Some(peek) = self.peek() {
+            if let Some(peek) = self.inner_peek() {
                 match peek {
                     ' ' | '\r' | '\t' | '\n' => {
-                        self.advance();
+                        self.inner_advance();
                     }
                     '/' if self.peek_next() == Some('/') => self.consume_comment(),
                     _ => return,
@@ -84,21 +132,21 @@ impl<'a> Scanner<'a> {
         }
     }
     fn consume_comment(&mut self) {
-        while let Some(x) = self.peek() {
+        while let Some(x) = self.inner_peek() {
             if x == '\n' {
                 break;
             } else {
-                self.advance();
+                self.inner_advance();
             }
         }
     }
 
     fn read_string(&mut self) -> Result<TokenType<'a>> {
         loop {
-            match self.peek() {
+            match self.inner_peek() {
                 Some('"') => break,
                 Some(_) => {
-                    self.advance();
+                    self.inner_advance();
                 }
                 None => Err(ScannerError::NonTerminatedString {
                     src: self.src.clone(),
@@ -106,21 +154,21 @@ impl<'a> Scanner<'a> {
                 })?,
             }
         }
-        self.advance();
+        self.inner_advance();
         let string = &self.src.inner()[self.start + 1..self.at - 1];
         Ok(TokenType::String(string))
     }
 
     fn read_number(&mut self) -> TokenType<'a> {
-        while self.peek().is_some_and(|x| x.is_ascii_digit()) {
-            self.advance();
+        while self.inner_peek().is_some_and(|x| x.is_ascii_digit()) {
+            self.inner_advance();
         }
-        if self.peek().is_some_and(|x| x == '.')
+        if self.inner_peek().is_some_and(|x| x == '.')
             && self.peek_next().is_some_and(|x| x.is_ascii_digit())
         {
-            self.advance(); // the .
-            while self.peek().is_some_and(|x| x.is_ascii_digit()) {
-                self.advance();
+            self.inner_advance(); // the .
+            while self.inner_peek().is_some_and(|x| x.is_ascii_digit()) {
+                self.inner_advance();
             }
         }
         let result = self.src.inner()[self.start..self.at]
@@ -131,10 +179,10 @@ impl<'a> Scanner<'a> {
 
     fn read_identifier(&mut self) -> TokenType<'a> {
         while self
-            .peek()
+            .inner_peek()
             .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
         {
-            self.advance();
+            self.inner_advance();
         }
 
         self.identifier_type()
@@ -177,9 +225,12 @@ impl<'a> Iterator for Scanner<'a> {
     type Item = Result<Token<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.peeked.is_some() {
+            return self.peeked.take();
+        }
         self.skip_whitespace_and_comments();
         self.start = self.at;
-        let char = self.advance()?;
+        let char = self.inner_advance()?;
 
         use TokenType::*;
         let token_type = match char {

@@ -1,34 +1,21 @@
-use std::iter::Peekable;
-
 use miette::{ByteOffset, LabeledSpan, NamedSource, Result, SourceSpan};
 use tracing::debug;
 
 use crate::{
     chunk::Chunk,
+    consume,
     gc::Gc,
     op::Op,
     scanner::Scanner,
     token::{Precedence, Token, TokenType},
-    types::{obj::Obj, value::Value},
+    types::value::Value,
 };
 
 pub struct Compiler<'a, 'gc> {
-    scanner: Peekable<Scanner<'a>>,
+    scanner: Scanner<'a>,
     eof: ByteOffset,
     chunk: Chunk,
     gc: &'gc mut Gc,
-}
-
-macro_rules! consume {
-    ($self:ident, $pattern:pat $(if $guard:expr)?, $err_create: expr) => {{
-        let token = $self.advance()?;
-        match token.token_type {
-            $pattern $(if $guard)? => Ok(()),
-            _ => {
-                #[allow(clippy::redundant_closure_call)] return Err($err_create(token));
-            }
-        }
-    }};
 }
 
 impl<'a, 'gc> Compiler<'a, 'gc> {
@@ -36,7 +23,7 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
         let eof = src.inner().len().saturating_sub(1);
         let scanner = Scanner::new(src);
         Compiler {
-            scanner: scanner.peekable(),
+            scanner,
             eof,
             chunk: Chunk::new(),
             gc,
@@ -66,18 +53,9 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
         }
     }
 
-    fn advance(&mut self) -> Result<Token<'a>> {
-        self.scanner.next().unwrap_or_else(|| {
-            miette::bail!(
-                labels = vec![LabeledSpan::at_offset(self.eof, "here")],
-                "Unexpected EOF"
-            )
-        })
-    }
-
     // parse everything at the given precedence or higher
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<()> {
-        let token = self.advance()?;
+        let token = self.scanner.advance()?;
         if token.token_type.is_prefix() {
             self.prefix(token)?
         } else {
@@ -89,7 +67,7 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
         }
 
         while precedence <= self.peek_infix_precedence()? {
-            let token = self.advance()?;
+            let token = self.scanner.advance()?;
             self.infix(token)?;
         }
 
@@ -186,7 +164,7 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
     fn grouping(&mut self) -> Result<()> {
         self.expression()?;
         consume!(
-            self,
+            self.scanner,
             TokenType::RightParen,
             |token: Token<'a>| miette::miette!(
                 labels = vec![LabeledSpan::at(token.location, "here")],
