@@ -6,6 +6,7 @@ use tracing::debug;
 use crate::{
     chunk::Chunk,
     compiler::Compiler,
+    datastructures::hash_table::HashTable,
     error::InterpreterError,
     gc::Gc,
     op::Op,
@@ -19,6 +20,7 @@ pub struct VM {
     stack: Box<[Value; STACK_SIZE]>,
     stack_top: *mut Value,
     gc: Gc,
+    globals: HashTable,
     printer: Box<dyn Printer>,
 }
 
@@ -44,10 +46,12 @@ impl VM {
         let mut stack = Box::new([Value::Nil; STACK_SIZE]);
         let stack_top = stack.as_mut_ptr();
         let gc = Gc::new();
+        let globals = HashTable::new();
         Self {
             stack,
             stack_top,
             gc,
+            globals,
             printer: Box::new(ConsolePrinter),
         }
     }
@@ -118,6 +122,35 @@ impl VM {
                 }
                 Op::Pop => {
                     self.pop();
+                }
+                Op::DefineGlobal(index) => {
+                    let name = chunk.constants[*index as usize];
+                    self.globals.insert(name, self.peek(0));
+                    self.pop();
+                }
+                Op::GetGlobal(index) => {
+                    let name = chunk.constants[*index as usize];
+                    if let Some(v) = self.globals.get(name) {
+                        self.push(v)
+                    } else {
+                        miette::bail!(
+                            labels = vec![LabeledSpan::at(chunk.locations[i], "here")],
+                            "Undefined variable {}",
+                            name
+                        )
+                    }
+                }
+                Op::SetGlobal(index) => {
+                    let name = chunk.constants[*index as usize];
+                    let inserted = self.globals.insert(name, self.peek(0));
+                    if inserted {
+                        self.globals.delete(name);
+                        miette::bail!(
+                            labels = vec![LabeledSpan::at(chunk.locations[i], "here")],
+                            "Undefined variable {}",
+                            name
+                        )
+                    }
                 }
             }
         }

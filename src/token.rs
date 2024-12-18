@@ -96,7 +96,7 @@ impl TokenType<'_> {
         use TokenType::*;
         matches!(
             self,
-            LeftParen | Minus | Bang | Number(_) | Nil | True | False | String(_)
+            LeftParen | Minus | Bang | Number(_) | Nil | True | False | String(_) | Identifier(_)
         )
     }
 

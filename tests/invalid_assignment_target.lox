@@ -1,0 +1,31 @@
+error
+a * b = c + d;
+----
+----
+{
+  "causes": [],
+  "filename": "",
+  "labels": [],
+  "message": "Parser Error",
+  "related": [
+    {
+      "causes": [],
+      "filename": "tests/invalid_assignment_target.lox",
+      "labels": [
+        {
+          "label": "here",
+          "span": {
+            "length": 1,
+            "offset": 6
+          }
+        }
+      ],
+      "message": "Invalid assignment target",
+      "related": [],
+      "severity": "error"
+    }
+  ],
+  "severity": "error"
+}
+----
+---- (no newline)

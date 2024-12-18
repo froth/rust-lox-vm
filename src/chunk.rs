@@ -92,14 +92,10 @@ impl Chunk {
         }
 
         match op {
-            Op::Constant(const_index) => {
-                let const_index: usize = (*const_index).into();
+            Op::Constant(idx) | Op::DefineGlobal(idx) | Op::GetGlobal(idx) | Op::SetGlobal(idx) => {
+                let const_index: usize = (*idx).into();
                 let constant = self.constants[const_index];
-                write!(
-                    &mut result,
-                    "{:<16} {:<4} '{}'",
-                    "CONSTANT", const_index, constant
-                )?;
+                write!(&mut result, "{:<16} {:<4} '{}'", op, const_index, constant)?;
             }
             op => write!(&mut result, "{op}")?,
         }
