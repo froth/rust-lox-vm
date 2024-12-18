@@ -19,4 +19,7 @@ pub enum Op {
     Less,
     Print,
     Pop,
+    DefineGlobal(u8),
+    GetGlobal(u8),
+    SetGlobal(u8),
 }

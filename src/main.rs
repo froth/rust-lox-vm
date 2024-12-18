@@ -20,6 +20,7 @@ mod gc;
 mod op;
 mod printer;
 mod scanner;
+mod source_span_extensions;
 mod token;
 mod types;
 mod vm;

@@ -1,4 +1,4 @@
-use miette::{ByteOffset, Diagnostic, Error, LabeledSpan, NamedSource, Report, Result, SourceSpan};
+use miette::{ByteOffset, Diagnostic, LabeledSpan, NamedSource, Report, Result, SourceSpan};
 use tracing::debug;
 
 use crate::{
@@ -8,6 +8,7 @@ use crate::{
     match_token,
     op::Op,
     scanner::Scanner,
+    source_span_extensions::SourceSpanExtensions,
     token::{Precedence, Token, TokenType},
     types::value::Value,
 };
@@ -79,7 +80,12 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
     }
 
     fn declaration(&mut self) -> Result<()> {
-        let res = self.statement();
+        let res = if let Some(var_token) = match_token!(self.scanner, TokenType::Var)? {
+            self.var_declaration(var_token.location)
+        } else {
+            self.statement()
+        };
+
         if let Err(err) = res {
             self.errors.push(err);
             self.synchronize();
@@ -87,9 +93,43 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
         Ok(())
     }
 
+    fn var_declaration(&mut self, location: SourceSpan) -> Result<()> {
+        let global = self.parse_variable()?;
+        if (match_token!(self.scanner, TokenType::Equal)?).is_some() {
+            self.expression()?;
+        } else {
+            self.chunk.write(Op::Nil, location);
+        }
+        let semicolon_location = consume!(self, TokenType::Semicolon, "Expected ';' after value");
+        self.define_variable(global, location.until(semicolon_location));
+        Ok(())
+    }
+
+    fn define_variable(&mut self, const_idx: u8, location: SourceSpan) {
+        self.chunk.write(Op::DefineGlobal(const_idx), location);
+    }
+
+    fn parse_variable(&mut self) -> Result<u8> {
+        let next = self.scanner.advance()?;
+        if let TokenType::Identifier(id) = next.token_type {
+            Ok(self.identifier_constant(id))
+        } else {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(next.location, "here")],
+                "Expected variable name but got `{}`",
+                next.token_type
+            )
+        }
+    }
+
+    fn identifier_constant(&mut self, name: &str) -> u8 {
+        self.chunk
+            .add_constant(Value::Obj(self.gc.manage_str(name)))
+    }
+
     fn statement(&mut self) -> Result<()> {
-        if let Some(print) = match_token!(self.scanner, TokenType::Print) {
-            self.print_statement(print?.location)
+        if let Some(print) = match_token!(self.scanner, TokenType::Print)? {
+            self.print_statement(print.location)
         } else {
             self.expression_statement()
         }
@@ -117,8 +157,9 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
     // parse everything at the given precedence or higher
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<()> {
         let token = self.scanner.advance()?;
+        let can_assign = precedence <= Precedence::Assignment;
         if token.token_type.is_prefix() {
-            self.prefix(token)?
+            self.prefix(token, can_assign)?
         } else {
             miette::bail!(
                 labels = vec![LabeledSpan::at(token.location, "here")],
@@ -130,6 +171,15 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
         while precedence <= self.peek_infix_precedence()? {
             let token = self.scanner.advance()?;
             self.infix(token)?;
+        }
+
+        if can_assign {
+            if let Some(equal) = match_token!(self.scanner, TokenType::Equal)? {
+                miette::bail!(
+                    labels = vec![LabeledSpan::at(equal.location, "here")],
+                    "Invalid assignment target",
+                )
+            }
         }
 
         Ok(())
@@ -161,7 +211,18 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
         self.chunk.write(Op::Constant(idx), location);
     }
 
-    fn prefix(&mut self, token: Token) -> Result<()> {
+    fn named_variable(&mut self, name: &str, can_assign: bool, location: SourceSpan) -> Result<()> {
+        let arg = self.identifier_constant(name);
+        if can_assign && match_token!(self.scanner, TokenType::Equal)?.is_some() {
+            self.expression()?;
+            self.chunk.write(Op::SetGlobal(arg), location);
+        } else {
+            self.chunk.write(Op::GetGlobal(arg), location);
+        }
+        Ok(())
+    }
+
+    fn prefix(&mut self, token: Token, can_assign: bool) -> Result<()> {
         match token.token_type {
             TokenType::LeftParen => self.grouping()?,
             TokenType::Minus => self.unary(Op::Negate, token.location)?,
@@ -174,7 +235,8 @@ impl<'a, 'gc> Compiler<'a, 'gc> {
                 let obj = self.gc.manage_str(s);
                 self.emit_constant(Value::Obj(obj), token.location)
             }
-            _ => unreachable!(), // guarded by is_prefix
+            TokenType::Identifier(name) => self.named_variable(name, can_assign, token.location)?,
+            _ => unreachable!(), // guarded by is_prefix TODO: benchmark unreachable_unsafe
         }
         Ok(())
     }

@@ -41,12 +41,12 @@ macro_rules! consume {
 macro_rules! match_token {
     ($self:expr, $pattern:pat $(if $guard:expr)?) => {{
         match $self.peek() {
-            Some(Err(_)) => $self.next(),
+            Some(Err(_)) => $self.next().transpose(),
             Some(Ok(a)) => match a.token_type {
-                $pattern $(if $guard)? => $self.next(),
-                _ => None
+                $pattern $(if $guard)? => $self.next().transpose(),
+                _ => Ok(None)
             },
-            None => None,
+            None => Ok(None),
         }
     }};
 }
