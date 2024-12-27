@@ -48,7 +48,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         let mut compiler = Parser::new(src, gc);
 
         while compiler.scanner.peek().is_some() {
-            compiler.declaration()?;
+            compiler.declaration();
         }
         debug!("\n{}", compiler.chunk.disassemble(src));
         if compiler.errors.is_empty() {
@@ -82,8 +82,8 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         }
     }
 
-    fn declaration(&mut self) -> Result<()> {
-        let res = if let Some(var_token) = match_token!(self.scanner, TokenType::Var)? {
+    fn declaration(&mut self) {
+        let res = if let Ok(Some(var_token)) = match_token!(self.scanner, TokenType::Var) {
             self.var_declaration(var_token.location)
         } else {
             self.statement()
@@ -93,7 +93,6 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             self.errors.push(err);
             self.synchronize();
         }
-        Ok(())
     }
 
     fn var_declaration(&mut self, location: SourceSpan) -> Result<()> {
@@ -165,8 +164,9 @@ impl<'a, 'gc> Parser<'a, 'gc> {
                 token_type: TokenType::RightBrace,
                 ..
             }))
-        ) {
-            self.declaration()?;
+        ) && self.scanner.peek().is_some()
+        {
+            self.declaration();
         }
         consume!(self, TokenType::RightBrace, "Expected '}}' after block");
         Ok(())
