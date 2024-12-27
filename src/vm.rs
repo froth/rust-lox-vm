@@ -5,11 +5,11 @@ use tracing::debug;
 
 use crate::{
     chunk::Chunk,
-    compiler::Compiler,
     datastructures::hash_table::HashTable,
     error::InterpreterError,
     gc::Gc,
     op::Op,
+    parser::Parser,
     printer::{ConsolePrinter, Printer},
     types::{obj::Obj, value::Value},
 };
@@ -60,7 +60,7 @@ impl VM {
         &mut self,
         src: NamedSource<String>,
     ) -> std::result::Result<(), InterpreterError> {
-        let chunk = match Compiler::compile(&src, &mut self.gc) {
+        let chunk = match Parser::compile(&src, &mut self.gc) {
             Ok(c) => c,
             Err(e) => return Err(InterpreterError::CompileError(e.with_source_code(src))),
         };
