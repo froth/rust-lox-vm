@@ -107,14 +107,21 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         Ok(())
     }
 
-    fn define_variable(&mut self, const_idx: u8, location: SourceSpan) {
-        self.chunk.write(Op::DefineGlobal(const_idx), location);
+    fn define_variable(&mut self, global_idx: Option<u8>, location: SourceSpan) {
+        if let Some(const_idx) = global_idx {
+            self.chunk.write(Op::DefineGlobal(const_idx), location);
+        }
     }
 
-    fn parse_variable(&mut self) -> Result<u8> {
+    fn parse_variable(&mut self) -> Result<Option<u8>> {
         let next = self.scanner.advance()?;
         if let TokenType::Identifier(id) = next.token_type {
-            Ok(self.identifier_constant(id))
+            self.declare_variable(id, next.location)?;
+            if self.current.is_local() {
+                Ok(None)
+            } else {
+                Ok(Some(self.identifier_constant(id)))
+            }
         } else {
             miette::bail!(
                 labels = vec![LabeledSpan::at(next.location, "here")],
@@ -122,6 +129,13 @@ impl<'a, 'gc> Parser<'a, 'gc> {
                 next.token_type
             )
         }
+    }
+
+    fn declare_variable(&mut self, name: &'a str, location: SourceSpan) -> Result<()> {
+        if self.current.is_local() {
+            self.current.add_local(name, location)?;
+        }
+        Ok(())
     }
 
     fn identifier_constant(&mut self, name: &str) -> u8 {
