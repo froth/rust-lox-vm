@@ -10,6 +10,12 @@ pub struct Compiler<'a> {
     scope_depth: u32,
 }
 
+#[derive(PartialEq, Debug)]
+pub struct ResolveResult {
+    pub slot: usize,
+    pub initialized: bool,
+}
+
 impl<'a> Compiler<'a> {
     pub fn new() -> Self {
         Self {
@@ -48,12 +54,15 @@ impl<'a> Compiler<'a> {
                 "Too many local variables in function.",
             )
         }
-        let local = Local {
-            name,
-            depth: Some(self.scope_depth),
-        };
+        let local = Local { name, depth: None };
         self.locals.push(local);
         Ok(())
+    }
+
+    pub fn mark_latest_initialized(&mut self) {
+        if let Some(last) = self.locals.last_mut() {
+            last.depth = Some(self.scope_depth);
+        }
     }
 
     pub fn has_variable_in_current_scope(&self, name: &str) -> bool {
@@ -62,6 +71,18 @@ impl<'a> Compiler<'a> {
             .rev()
             .take_while(|l| l.depth.is_none_or(|d| d == self.scope_depth))
             .any(|l| l.name == name)
+    }
+
+    pub fn resolve_locale(&self, name: &str) -> Option<ResolveResult> {
+        self.locals
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, l)| l.name == name)
+            .map(|(position, l)| ResolveResult {
+                slot: position,
+                initialized: l.depth.is_some(),
+            })
     }
 }
 
@@ -160,5 +181,61 @@ mod tests {
             scope_depth: 2,
         };
         assert_eq!(compiler.end_scope(), 2);
+    }
+
+    #[test]
+    fn resolve_local_uninitialized() {
+        let compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(1),
+                },
+                Local {
+                    name: "a",
+                    depth: Some(2),
+                },
+                Local {
+                    name: "a",
+                    depth: None,
+                },
+            ],
+            scope_depth: 2,
+        };
+        assert_eq!(
+            compiler.resolve_locale("a"),
+            Some(ResolveResult {
+                slot: 2,
+                initialized: false
+            })
+        );
+    }
+
+    #[test]
+    fn resolve_local_initialized() {
+        let compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(1),
+                },
+                Local {
+                    name: "a",
+                    depth: Some(2),
+                },
+                Local {
+                    name: "b",
+                    depth: None,
+                },
+            ],
+            scope_depth: 2,
+        };
+        assert_eq!(
+            compiler.resolve_locale("a"),
+            Some(ResolveResult {
+                slot: 1,
+                initialized: true
+            })
+        );
     }
 }

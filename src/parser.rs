@@ -110,6 +110,8 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     fn define_variable(&mut self, global_idx: Option<u8>, location: SourceSpan) {
         if let Some(const_idx) = global_idx {
             self.chunk.write(Op::DefineGlobal(const_idx), location);
+        } else {
+            self.current.mark_latest_initialized();
         }
     }
 
@@ -257,12 +259,24 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     }
 
     fn named_variable(&mut self, name: &str, can_assign: bool, location: SourceSpan) -> Result<()> {
-        let arg = self.identifier_constant(name);
+        let (get_op, set_op) = if let Some(resolved) = self.current.resolve_locale(name) {
+            if !resolved.initialized {
+                miette::bail!(
+                    labels = vec![LabeledSpan::at(location, "here")],
+                    "Can't read local variable in its own initializer",
+                )
+            }
+            let slot = resolved.slot as u8;
+            (Op::GetLocal(slot), Op::SetLocal(slot))
+        } else {
+            let arg = self.identifier_constant(name);
+            (Op::GetGlobal(arg), Op::SetGlobal(arg))
+        };
         if can_assign && match_token!(self.scanner, TokenType::Equal)?.is_some() {
             self.expression()?;
-            self.chunk.write(Op::SetGlobal(arg), location);
+            self.chunk.write(set_op, location);
         } else {
-            self.chunk.write(Op::GetGlobal(arg), location);
+            self.chunk.write(get_op, location);
         }
         Ok(())
     }

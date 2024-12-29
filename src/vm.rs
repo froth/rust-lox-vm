@@ -149,6 +149,10 @@ impl VM {
                         )
                     }
                 }
+                Op::GetLocal(slot) => {
+                    self.push(self.stack[*slot as usize]);
+                }
+                Op::SetLocal(slot) => self.stack[*slot as usize] = self.peek(0),
             }
         }
         Ok(())
