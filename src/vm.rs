@@ -5,11 +5,11 @@ use tracing::debug;
 
 use crate::{
     chunk::Chunk,
-    compiler::Compiler,
     datastructures::hash_table::HashTable,
     error::InterpreterError,
     gc::Gc,
     op::Op,
+    parser::Parser,
     printer::{ConsolePrinter, Printer},
     types::{obj::Obj, value::Value},
 };
@@ -60,7 +60,7 @@ impl VM {
         &mut self,
         src: NamedSource<String>,
     ) -> std::result::Result<(), InterpreterError> {
-        let chunk = match Compiler::compile(&src, &mut self.gc) {
+        let chunk = match Parser::compile(&src, &mut self.gc) {
             Ok(c) => c,
             Err(e) => return Err(InterpreterError::CompileError(e.with_source_code(src))),
         };
@@ -79,9 +79,6 @@ impl VM {
             debug!("{}", chunk.disassemble_at(src, i));
             debug!("          {}", self.trace_stack());
             match op {
-                Op::Return => {
-                    todo!()
-                }
                 Op::Constant(index) => {
                     let constant = chunk.constants[*index as usize];
                     self.push(constant);
@@ -152,6 +149,10 @@ impl VM {
                         )
                     }
                 }
+                Op::GetLocal(slot) => {
+                    self.push(self.stack[*slot as usize]);
+                }
+                Op::SetLocal(slot) => self.stack[*slot as usize] = self.peek(0),
             }
         }
         Ok(())
@@ -222,7 +223,7 @@ impl VM {
 }
 
 #[cfg(test)]
-mod lox_tests {
+mod tests {
     use datadriven::walk;
     use miette::NamedSource;
     use serde_json::Value;
@@ -248,6 +249,7 @@ mod lox_tests {
                 let mut vm = VM::with_printer(Box::new(printer.clone()));
                 let named_source = NamedSource::new(file_name.clone(), input.clone());
                 let result = vm.interpret(named_source);
+                assert_eq!(vm.stack_top, vm.stack.as_mut_ptr(), "Stack is not empty");
                 if test_case.directive == "error" {
                     let err = result.expect_err(
                         format!("Test {file_name} meant to be failing but succeeded").as_str(),

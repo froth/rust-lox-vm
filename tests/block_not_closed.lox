@@ -1,0 +1,34 @@
+error
+{
+    var a = 1;
+----
+----
+{
+  "causes": [],
+  "filename": "",
+  "labels": [],
+  "message": "Parser Error",
+  "related": [
+    {
+      "causes": [
+        "Unexpected EOF"
+      ],
+      "filename": "tests/block_not_closed.lox",
+      "labels": [
+        {
+          "label": "here",
+          "span": {
+            "length": 0,
+            "offset": 16
+          }
+        }
+      ],
+      "message": "Expected '}}' after block",
+      "related": [],
+      "severity": "error"
+    }
+  ],
+  "severity": "error"
+}
+----
+---- (no newline)

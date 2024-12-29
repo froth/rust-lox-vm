@@ -1,301 +1,241 @@
-use miette::{ByteOffset, Diagnostic, LabeledSpan, NamedSource, Report, Result, SourceSpan};
-use tracing::debug;
-
-use crate::{
-    chunk::Chunk,
-    consume,
-    gc::Gc,
-    match_token,
-    op::Op,
-    scanner::Scanner,
-    source_span_extensions::SourceSpanExtensions,
-    token::{Precedence, Token, TokenType},
-    types::value::Value,
-};
-
-pub struct Compiler<'a, 'gc> {
-    scanner: Scanner<'a>,
-    eof: ByteOffset,
-    chunk: Chunk,
-    gc: &'gc mut Gc,
-    errors: Vec<Report>,
+use miette::{LabeledSpan, Result, SourceSpan};
+#[derive(PartialEq, Debug)]
+struct Local<'a> {
+    name: &'a str,
+    depth: Option<u32>,
 }
 
-#[derive(thiserror::Error, Debug, Diagnostic)]
-#[error("Errors while parsing")]
-pub struct ParseErrors {
-    #[related]
-    pub parser_errors: Vec<Report>,
+pub struct Compiler<'a> {
+    locals: Vec<Local<'a>>,
+    scope_depth: u32,
 }
 
-impl<'a, 'gc> Compiler<'a, 'gc> {
-    fn new(src: &'a NamedSource<String>, gc: &'gc mut Gc) -> Self {
-        let eof = src.inner().len().saturating_sub(1);
-        let scanner = Scanner::new(src);
-        Compiler {
-            scanner,
-            eof,
-            chunk: Chunk::new(),
-            gc,
-            errors: vec![],
+#[derive(PartialEq, Debug)]
+pub struct ResolveResult {
+    pub slot: usize,
+    pub initialized: bool,
+}
+
+impl<'a> Compiler<'a> {
+    pub fn new() -> Self {
+        Self {
+            locals: vec![],
+            scope_depth: 0,
         }
     }
 
-    pub fn compile(src: &'a NamedSource<String>, gc: &'gc mut Gc) -> Result<Chunk> {
-        let mut compiler = Compiler::new(src, gc);
-
-        while compiler.scanner.peek().is_some() {
-            compiler.declaration()?;
-        }
-        debug!("\n{}", compiler.chunk.disassemble(src));
-        if compiler.errors.is_empty() {
-            Ok(compiler.chunk)
-        } else {
-            Err(ParseErrors {
-                parser_errors: compiler.errors,
-            })?
-        }
+    pub fn is_local(&self) -> bool {
+        self.scope_depth > 0
     }
 
-    fn synchronize(&mut self) {
-        while let Some(token) = self.scanner.peek() {
-            if let Ok(token) = token {
-                match token.token_type {
-                    TokenType::Semicolon => {
-                        let _ = self.advance();
-                        return;
-                    }
-                    TokenType::Class
-                    | TokenType::Fun
-                    | TokenType::Var
-                    | TokenType::For
-                    | TokenType::If
-                    | TokenType::While
-                    | TokenType::Print => return,
-                    _ => (),
-                }
+    pub fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    pub fn end_scope(&mut self) -> usize {
+        self.scope_depth -= 1;
+
+        let mut popped: usize = 0;
+        while let Some(last) = self.locals.last() {
+            if last.depth.is_none_or(|s| s > self.scope_depth) {
+                self.locals.pop();
+                popped += 1;
+            } else {
+                break;
             }
-            let _ = self.advance();
+        }
+        popped
+    }
+
+    pub fn add_local(&mut self, name: &'a str, location: SourceSpan) -> Result<()> {
+        if self.locals.len() > u8::MAX as usize {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(location, "here")],
+                "Too many local variables in function.",
+            )
+        }
+        let local = Local { name, depth: None };
+        self.locals.push(local);
+        Ok(())
+    }
+
+    pub fn mark_latest_initialized(&mut self) {
+        if let Some(last) = self.locals.last_mut() {
+            last.depth = Some(self.scope_depth);
         }
     }
 
-    fn declaration(&mut self) -> Result<()> {
-        let res = if let Some(var_token) = match_token!(self.scanner, TokenType::Var)? {
-            self.var_declaration(var_token.location)
-        } else {
-            self.statement()
+    pub fn has_variable_in_current_scope(&self, name: &str) -> bool {
+        self.locals
+            .iter()
+            .rev()
+            .take_while(|l| l.depth.is_none_or(|d| d == self.scope_depth))
+            .any(|l| l.name == name)
+    }
+
+    pub fn resolve_locale(&self, name: &str) -> Option<ResolveResult> {
+        self.locals
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, l)| l.name == name)
+            .map(|(position, l)| ResolveResult {
+                slot: position,
+                initialized: l.depth.is_some(),
+            })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_works() {
+        let compiler = Compiler::new();
+        assert_eq!(compiler.locals, vec![]);
+        assert_eq!(compiler.scope_depth, 0);
+    }
+
+    #[test]
+    fn has_variable_on_empty() {
+        let compiler = Compiler::new();
+        assert!(!compiler.has_variable_in_current_scope("asdasd"));
+    }
+
+    #[test]
+    fn has_variable_on_upper_scope() {
+        let compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(1),
+                },
+                Local {
+                    name: "b",
+                    depth: Some(2),
+                },
+            ],
+            scope_depth: 2,
         };
-
-        if let Err(err) = res {
-            self.errors.push(err);
-            self.synchronize();
-        }
-        Ok(())
+        assert!(!compiler.has_variable_in_current_scope("a"));
     }
 
-    fn var_declaration(&mut self, location: SourceSpan) -> Result<()> {
-        let global = self.parse_variable()?;
-        if (match_token!(self.scanner, TokenType::Equal)?).is_some() {
-            self.expression()?;
-        } else {
-            self.chunk.write(Op::Nil, location);
-        }
-        let semicolon_location = consume!(self, TokenType::Semicolon, "Expected ';' after value");
-        self.define_variable(global, location.until(semicolon_location));
-        Ok(())
+    #[test]
+    fn has_variable_on_current_scope() {
+        let compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(2),
+                },
+                Local {
+                    name: "b",
+                    depth: Some(2),
+                },
+            ],
+            scope_depth: 2,
+        };
+        assert!(compiler.has_variable_in_current_scope("a"));
     }
 
-    fn define_variable(&mut self, const_idx: u8, location: SourceSpan) {
-        self.chunk.write(Op::DefineGlobal(const_idx), location);
+    #[test]
+    fn has_variable_on_current_scope_with_uninitialized_behind() {
+        let compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(1),
+                },
+                Local {
+                    name: "b",
+                    depth: Some(2),
+                },
+                Local {
+                    name: "c",
+                    depth: None,
+                },
+            ],
+            scope_depth: 2,
+        };
+        assert!(compiler.has_variable_in_current_scope("b"));
     }
 
-    fn parse_variable(&mut self) -> Result<u8> {
-        let next = self.scanner.advance()?;
-        if let TokenType::Identifier(id) = next.token_type {
-            Ok(self.identifier_constant(id))
-        } else {
-            miette::bail!(
-                labels = vec![LabeledSpan::at(next.location, "here")],
-                "Expected variable name but got `{}`",
-                next.token_type
-            )
-        }
+    #[test]
+    fn end_scope_returns_correct_count() {
+        let mut compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(1),
+                },
+                Local {
+                    name: "b",
+                    depth: Some(2),
+                },
+                Local {
+                    name: "c",
+                    depth: None,
+                },
+            ],
+            scope_depth: 2,
+        };
+        assert_eq!(compiler.end_scope(), 2);
     }
 
-    fn identifier_constant(&mut self, name: &str) -> u8 {
-        self.chunk
-            .add_constant(Value::Obj(self.gc.manage_str(name)))
-    }
-
-    fn statement(&mut self) -> Result<()> {
-        if let Some(print) = match_token!(self.scanner, TokenType::Print)? {
-            self.print_statement(print.location)
-        } else {
-            self.expression_statement()
-        }
-    }
-
-    fn print_statement(&mut self, location: SourceSpan) -> Result<()> {
-        self.expression()?;
-        consume!(self, TokenType::Semicolon, "Expected ';' after value");
-
-        self.chunk.write(Op::Print, location);
-        Ok(())
-    }
-
-    fn expression_statement(&mut self) -> Result<()> {
-        self.expression()?;
-        let location = consume!(self, TokenType::Semicolon, "Expected ';' after value");
-        self.chunk.write(Op::Pop, location);
-        Ok(())
-    }
-
-    fn expression(&mut self) -> Result<()> {
-        self.parse_precedence(Precedence::Assignment)
-    }
-
-    // parse everything at the given precedence or higher
-    fn parse_precedence(&mut self, precedence: Precedence) -> Result<()> {
-        let token = self.scanner.advance()?;
-        let can_assign = precedence <= Precedence::Assignment;
-        if token.token_type.is_prefix() {
-            self.prefix(token, can_assign)?
-        } else {
-            miette::bail!(
-                labels = vec![LabeledSpan::at(token.location, "here")],
-                "Expected expression but got `{}`",
-                token.token_type
-            )
-        }
-
-        while precedence <= self.peek_infix_precedence()? {
-            let token = self.scanner.advance()?;
-            self.infix(token)?;
-        }
-
-        if can_assign {
-            if let Some(equal) = match_token!(self.scanner, TokenType::Equal)? {
-                miette::bail!(
-                    labels = vec![LabeledSpan::at(equal.location, "here")],
-                    "Invalid assignment target",
-                )
-            }
-        }
-
-        Ok(())
-    }
-
-    fn advance(&mut self) -> Result<Token<'a>> {
-        self.scanner.next().unwrap_or_else(|| {
-            miette::bail!(
-                labels = vec![LabeledSpan::at_offset(self.eof, "here")],
-                "Unexpected EOF"
-            )
-        })
-    }
-
-    fn peek_infix_precedence(&mut self) -> Result<Precedence> {
-        match self.scanner.peek() {
-            Some(Err(_)) => Err(self
-                .scanner
-                .next()
-                .expect("checked some above")
-                .expect_err("checked Err above")),
-            Some(Ok(token)) => Ok(token.token_type.infix_precedence()),
-            None => Ok(Precedence::None),
-        }
-    }
-
-    fn emit_constant(&mut self, value: Value, location: SourceSpan) {
-        let idx = self.chunk.add_constant(value);
-        self.chunk.write(Op::Constant(idx), location);
-    }
-
-    fn named_variable(&mut self, name: &str, can_assign: bool, location: SourceSpan) -> Result<()> {
-        let arg = self.identifier_constant(name);
-        if can_assign && match_token!(self.scanner, TokenType::Equal)?.is_some() {
-            self.expression()?;
-            self.chunk.write(Op::SetGlobal(arg), location);
-        } else {
-            self.chunk.write(Op::GetGlobal(arg), location);
-        }
-        Ok(())
-    }
-
-    fn prefix(&mut self, token: Token, can_assign: bool) -> Result<()> {
-        match token.token_type {
-            TokenType::LeftParen => self.grouping()?,
-            TokenType::Minus => self.unary(Op::Negate, token.location)?,
-            TokenType::Bang => self.unary(Op::Not, token.location)?,
-            TokenType::Number(f) => self.emit_constant(Value::Number(f), token.location),
-            TokenType::Nil => self.chunk.write(Op::Nil, token.location),
-            TokenType::True => self.chunk.write(Op::True, token.location),
-            TokenType::False => self.chunk.write(Op::False, token.location),
-            TokenType::String(s) => {
-                let obj = self.gc.manage_str(s);
-                self.emit_constant(Value::Obj(obj), token.location)
-            }
-            TokenType::Identifier(name) => self.named_variable(name, can_assign, token.location)?,
-            _ => unreachable!(), // guarded by is_prefix TODO: benchmark unreachable_unsafe
-        }
-        Ok(())
-    }
-
-    fn infix(&mut self, token: Token) -> Result<()> {
-        match token.token_type {
-            TokenType::Minus => self.binary(Op::Subtract, None, Precedence::Factor, token.location),
-            TokenType::Plus => self.binary(Op::Add, None, Precedence::Factor, token.location),
-            TokenType::Star => self.binary(Op::Multiply, None, Precedence::Unary, token.location),
-            TokenType::Slash => self.binary(Op::Divide, None, Precedence::Unary, token.location),
-            TokenType::BangEqual => self.binary(
-                Op::Equal,
-                Some(Op::Not),
-                Precedence::Comparision,
-                token.location,
-            ),
-            TokenType::EqualEqual => {
-                self.binary(Op::Equal, None, Precedence::Comparision, token.location)
-            }
-            TokenType::Greater => self.binary(Op::Greater, None, Precedence::Term, token.location),
-            TokenType::GreaterEqual => {
-                self.binary(Op::Less, Some(Op::Not), Precedence::Term, token.location)
-            }
-            TokenType::Less => self.binary(Op::Less, None, Precedence::Term, token.location),
-            TokenType::LessEqual => {
-                self.binary(Op::Greater, Some(Op::Not), Precedence::Term, token.location)
-            }
-            _ => unreachable!(), // guarded by infix_precedence
-        }
-    }
-
-    fn binary(
-        &mut self,
-        op: Op,
-        second_op: Option<Op>,
-        precedence: Precedence,
-        location: SourceSpan,
-    ) -> Result<()> {
-        self.parse_precedence(precedence)?;
-        self.chunk.write(op, location);
-        if let Some(o) = second_op {
-            self.chunk.write(o, location)
-        }
-        Ok(())
-    }
-
-    fn unary(&mut self, op: Op, location: SourceSpan) -> Result<()> {
-        self.expression()?;
-        self.chunk.write(op, location);
-        Ok(())
-    }
-
-    fn grouping(&mut self) -> Result<()> {
-        self.expression()?;
-        consume!(
-            self.scanner,
-            TokenType::RightParen,
-            "Expected ')' after Expression"
+    #[test]
+    fn resolve_local_uninitialized() {
+        let compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(1),
+                },
+                Local {
+                    name: "a",
+                    depth: Some(2),
+                },
+                Local {
+                    name: "a",
+                    depth: None,
+                },
+            ],
+            scope_depth: 2,
+        };
+        assert_eq!(
+            compiler.resolve_locale("a"),
+            Some(ResolveResult {
+                slot: 2,
+                initialized: false
+            })
         );
-        Ok(())
+    }
+
+    #[test]
+    fn resolve_local_initialized() {
+        let compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(1),
+                },
+                Local {
+                    name: "a",
+                    depth: Some(2),
+                },
+                Local {
+                    name: "b",
+                    depth: None,
+                },
+            ],
+            scope_depth: 2,
+        };
+        assert_eq!(
+            compiler.resolve_locale("a"),
+            Some(ResolveResult {
+                slot: 1,
+                initialized: true
+            })
+        );
     }
 }

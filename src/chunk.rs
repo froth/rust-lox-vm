@@ -97,6 +97,9 @@ impl Chunk {
                 let constant = self.constants[const_index];
                 write!(&mut result, "{:<16} {:<4} '{}'", op, const_index, constant)?;
             }
+            Op::GetLocal(slot) | Op::SetLocal(slot) => {
+                write!(&mut result, "{:<16} {:<4}", op, slot)?
+            }
             op => write!(&mut result, "{op}")?,
         }
         Ok((result, line_number))

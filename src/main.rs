@@ -18,6 +18,7 @@ mod datastructures;
 mod error;
 mod gc;
 mod op;
+mod parser;
 mod printer;
 mod scanner;
 mod source_span_extensions;
