@@ -79,9 +79,6 @@ impl VM {
             debug!("{}", chunk.disassemble_at(src, i));
             debug!("          {}", self.trace_stack());
             match op {
-                Op::Return => {
-                    todo!()
-                }
                 Op::Constant(index) => {
                     let constant = chunk.constants[*index as usize];
                     self.push(constant);

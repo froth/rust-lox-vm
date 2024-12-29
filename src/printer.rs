@@ -30,9 +30,6 @@ pub mod vec_printer {
                 lines: Rc::new(vec![].into()),
             }
         }
-        pub fn get_lines(&self) -> Vec<Value> {
-            self.lines.borrow().clone()
-        }
 
         pub fn get_output(&self) -> String {
             self.lines

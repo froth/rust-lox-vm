@@ -109,23 +109,23 @@ mod tests {
     #[test]
     fn write_chunk() {
         let mut vec = LoxVector::new();
-        vec.push(Op::Return);
+        vec.push(Op::Pop);
         assert_eq!(vec.capacity, 8);
         assert_eq!(vec.len(), 1);
-        assert_eq!(vec[0], Op::Return)
+        assert_eq!(vec[0], Op::Pop)
     }
 
     #[test]
     fn grow() {
         let mut vec = LoxVector::new();
-        vec.push(Op::Return);
-        vec.push(Op::Return);
-        vec.push(Op::Return);
-        vec.push(Op::Return);
-        vec.push(Op::Return);
-        vec.push(Op::Return);
-        vec.push(Op::Return);
-        vec.push(Op::Return);
+        vec.push(Op::Pop);
+        vec.push(Op::Pop);
+        vec.push(Op::Pop);
+        vec.push(Op::Pop);
+        vec.push(Op::Pop);
+        vec.push(Op::Pop);
+        vec.push(Op::Pop);
+        vec.push(Op::Pop);
         vec.push(Op::Constant(1));
         assert_eq!(vec.len(), 9);
         assert_eq!(vec[8], Op::Constant(1));
@@ -135,17 +135,17 @@ mod tests {
     fn grow_to_2049() {
         let mut vec = LoxVector::new();
         for _ in 0..2049 {
-            vec.push(Op::Return);
+            vec.push(Op::Pop);
         }
         assert_eq!(vec.len(), 2049);
-        assert_eq!(vec[2048], Op::Return);
+        assert_eq!(vec[2048], Op::Pop);
         assert_eq!(vec.capacity, 4096);
     }
 
     #[test]
     fn slices_work() {
         let mut vec = LoxVector::new();
-        vec.push(Op::Return);
+        vec.push(Op::Pop);
         vec[0] = Op::Constant(1);
         assert_eq!(vec[0], Op::Constant(1));
     }
