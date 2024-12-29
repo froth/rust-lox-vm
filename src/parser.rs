@@ -133,6 +133,12 @@ impl<'a, 'gc> Parser<'a, 'gc> {
 
     fn declare_variable(&mut self, name: &'a str, location: SourceSpan) -> Result<()> {
         if self.current.is_local() {
+            if self.current.has_variable_in_current_scope(name) {
+                miette::bail!(
+                    labels = vec![LabeledSpan::at(location, "here")],
+                    "Already a variable with this name in this scope"
+                )
+            }
             self.current.add_local(name, location)?;
         }
         Ok(())
@@ -148,8 +154,11 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             self.print_statement(print.location)
         } else if (match_token!(self.scanner, TokenType::LeftBrace)?).is_some() {
             self.current.begin_scope();
-            self.block()?;
-            self.current.end_scope();
+            let closing_location = self.block()?;
+            let popped = self.current.end_scope();
+            for _ in 0..popped {
+                self.chunk.write(Op::Pop, closing_location);
+            }
             Ok(())
         } else {
             self.expression_statement()
@@ -171,7 +180,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         Ok(())
     }
 
-    fn block(&mut self) -> Result<()> {
+    fn block(&mut self) -> Result<SourceSpan> {
         while !matches!(
             self.scanner.peek(),
             Some(Ok(Token {
@@ -182,8 +191,8 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         {
             self.declaration();
         }
-        consume!(self, TokenType::RightBrace, "Expected '}}' after block");
-        Ok(())
+        let location = consume!(self, TokenType::RightBrace, "Expected '}}' after block");
+        Ok(location)
     }
 
     fn expression(&mut self) -> Result<()> {

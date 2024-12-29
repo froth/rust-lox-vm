@@ -1,0 +1,34 @@
+error
+{
+    var a;
+    var a;
+}
+----
+----
+{
+  "causes": [],
+  "filename": "",
+  "labels": [],
+  "message": "Parser Error",
+  "related": [
+    {
+      "causes": [],
+      "filename": "tests/duplicate_variable_declaration.lox",
+      "labels": [
+        {
+          "label": "here",
+          "span": {
+            "length": 1,
+            "offset": 21
+          }
+        }
+      ],
+      "message": "Already a variable with this name in this scope",
+      "related": [],
+      "severity": "error"
+    }
+  ],
+  "severity": "error"
+}
+----
+---- (no newline)

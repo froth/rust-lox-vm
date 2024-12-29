@@ -1,0 +1,12 @@
+interpret
+{
+   var a1;
+   {
+      var a2;
+   }
+}
+----
+----
+
+----
+---- (no newline)

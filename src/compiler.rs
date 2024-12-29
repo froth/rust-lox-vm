@@ -1,4 +1,5 @@
-use miette::{ByteOffset, Diagnostic, LabeledSpan, NamedSource, Report, Result, SourceSpan};
+use miette::{LabeledSpan, Result, SourceSpan};
+#[derive(PartialEq, Debug)]
 struct Local<'a> {
     name: &'a str,
     depth: Option<u32>,
@@ -20,17 +21,24 @@ impl<'a> Compiler<'a> {
     pub fn is_local(&self) -> bool {
         self.scope_depth > 0
     }
-    pub fn is_global(&self) -> bool {
-        self.scope_depth == 0
-    }
 
     pub fn begin_scope(&mut self) {
         self.scope_depth += 1;
     }
 
-    pub fn end_scope(&mut self) {
+    pub fn end_scope(&mut self) -> usize {
         self.scope_depth -= 1;
-        //TODO: return number of pops
+
+        let mut popped: usize = 0;
+        while let Some(last) = self.locals.last() {
+            if last.depth.is_none_or(|s| s > self.scope_depth) {
+                self.locals.pop();
+                popped += 1;
+            } else {
+                break;
+            }
+        }
+        popped
     }
 
     pub fn add_local(&mut self, name: &'a str, location: SourceSpan) -> Result<()> {
@@ -46,5 +54,111 @@ impl<'a> Compiler<'a> {
         };
         self.locals.push(local);
         Ok(())
+    }
+
+    pub fn has_variable_in_current_scope(&self, name: &str) -> bool {
+        self.locals
+            .iter()
+            .rev()
+            .take_while(|l| l.depth.is_none_or(|d| d == self.scope_depth))
+            .any(|l| l.name == name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_works() {
+        let compiler = Compiler::new();
+        assert_eq!(compiler.locals, vec![]);
+        assert_eq!(compiler.scope_depth, 0);
+    }
+
+    #[test]
+    fn has_variable_on_empty() {
+        let compiler = Compiler::new();
+        assert!(!compiler.has_variable_in_current_scope("asdasd"));
+    }
+
+    #[test]
+    fn has_variable_on_upper_scope() {
+        let compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(1),
+                },
+                Local {
+                    name: "b",
+                    depth: Some(2),
+                },
+            ],
+            scope_depth: 2,
+        };
+        assert!(!compiler.has_variable_in_current_scope("a"));
+    }
+
+    #[test]
+    fn has_variable_on_current_scope() {
+        let compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(2),
+                },
+                Local {
+                    name: "b",
+                    depth: Some(2),
+                },
+            ],
+            scope_depth: 2,
+        };
+        assert!(compiler.has_variable_in_current_scope("a"));
+    }
+
+    #[test]
+    fn has_variable_on_current_scope_with_uninitialized_behind() {
+        let compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(1),
+                },
+                Local {
+                    name: "b",
+                    depth: Some(2),
+                },
+                Local {
+                    name: "c",
+                    depth: None,
+                },
+            ],
+            scope_depth: 2,
+        };
+        assert!(compiler.has_variable_in_current_scope("b"));
+    }
+
+    #[test]
+    fn end_scope_returns_correct_count() {
+        let mut compiler = Compiler {
+            locals: vec![
+                Local {
+                    name: "a",
+                    depth: Some(1),
+                },
+                Local {
+                    name: "b",
+                    depth: Some(2),
+                },
+                Local {
+                    name: "c",
+                    depth: None,
+                },
+            ],
+            scope_depth: 2,
+        };
+        assert_eq!(compiler.end_scope(), 2);
     }
 }

@@ -222,7 +222,7 @@ impl VM {
 }
 
 #[cfg(test)]
-mod lox_tests {
+mod tests {
     use datadriven::walk;
     use miette::NamedSource;
     use serde_json::Value;
@@ -248,6 +248,7 @@ mod lox_tests {
                 let mut vm = VM::with_printer(Box::new(printer.clone()));
                 let named_source = NamedSource::new(file_name.clone(), input.clone());
                 let result = vm.interpret(named_source);
+                assert_eq!(vm.stack_top, vm.stack.as_mut_ptr(), "Stack is not empty");
                 if test_case.directive == "error" {
                     let err = result.expect_err(
                         format!("Test {file_name} meant to be failing but succeeded").as_str(),
