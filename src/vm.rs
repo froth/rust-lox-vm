@@ -75,12 +75,22 @@ impl VM {
     }
 
     fn interpret_inner(&mut self, src: &NamedSource<String>, chunk: Chunk) -> miette::Result<()> {
-        for (i, op) in chunk.code.iter().enumerate() {
+        let start: *const Op = &chunk.code[0];
+        let mut ip: *const Op = start;
+        loop {
+            let op = unsafe { *ip };
+            //TODO: i has only to be computed in error cases.
+            // In clox this is achieved by ip being a global variable. Performance should be better if ip would be part of vm?
+            let i = unsafe { ip.offset_from(start) as usize };
+            unsafe {
+                ip = ip.add(1);
+            }
             debug!("{}", chunk.disassemble_at(src, i));
             debug!("          {}", self.trace_stack());
             match op {
+                Op::Return => return Ok(()),
                 Op::Constant(index) => {
-                    let constant = chunk.constants[*index as usize];
+                    let constant = chunk.constants[index as usize];
                     self.push(constant);
                 }
                 Op::Nil => self.push(Value::Nil),
@@ -121,12 +131,12 @@ impl VM {
                     self.pop();
                 }
                 Op::DefineGlobal(index) => {
-                    let name = chunk.constants[*index as usize];
+                    let name = chunk.constants[index as usize];
                     self.globals.insert(name, self.peek(0));
                     self.pop();
                 }
                 Op::GetGlobal(index) => {
-                    let name = chunk.constants[*index as usize];
+                    let name = chunk.constants[index as usize];
                     if let Some(v) = self.globals.get(name) {
                         self.push(v)
                     } else {
@@ -138,7 +148,7 @@ impl VM {
                     }
                 }
                 Op::SetGlobal(index) => {
-                    let name = chunk.constants[*index as usize];
+                    let name = chunk.constants[index as usize];
                     let inserted = self.globals.insert(name, self.peek(0));
                     if inserted {
                         self.globals.delete(name);
@@ -150,12 +160,16 @@ impl VM {
                     }
                 }
                 Op::GetLocal(slot) => {
-                    self.push(self.stack[*slot as usize]);
+                    self.push(self.stack[slot as usize]);
                 }
-                Op::SetLocal(slot) => self.stack[*slot as usize] = self.peek(0),
+                Op::SetLocal(slot) => self.stack[slot as usize] = self.peek(0),
+                Op::JumpIfFalse(offset) => {
+                    if self.peek(0).is_falsey() {
+                        unsafe { ip = ip.add((offset - 1) as usize) }
+                    }
+                }
             }
         }
-        Ok(())
     }
 
     fn plus_operator(&mut self, chunk: &Chunk, index: usize) -> miette::Result<()> {

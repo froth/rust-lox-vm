@@ -45,17 +45,20 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     }
 
     pub fn compile(src: &'a NamedSource<String>, gc: &'gc mut Gc) -> Result<Chunk> {
-        let mut compiler = Parser::new(src, gc);
+        let mut parser: Parser<'_, '_> = Parser::new(src, gc);
 
-        while compiler.scanner.peek().is_some() {
-            compiler.declaration();
+        while parser.scanner.peek().is_some() {
+            parser.declaration();
         }
-        debug!("\n{}", compiler.chunk.disassemble(src));
-        if compiler.errors.is_empty() {
-            Ok(compiler.chunk)
+        parser
+            .chunk
+            .write(Op::Return, SourceSpan::new(parser.eof.into(), 1));
+        debug!("\n{}", parser.chunk.disassemble(src));
+        if parser.errors.is_empty() {
+            Ok(parser.chunk)
         } else {
             Err(ParseErrors {
-                parser_errors: compiler.errors,
+                parser_errors: parser.errors,
             })?
         }
     }
@@ -154,6 +157,8 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     fn statement(&mut self) -> Result<()> {
         if let Some(print) = match_token!(self.scanner, TokenType::Print)? {
             self.print_statement(print.location)
+        } else if let Some(if_token) = match_token!(self.scanner, TokenType::If)? {
+            self.if_statement(if_token.location)
         } else if (match_token!(self.scanner, TokenType::LeftBrace)?).is_some() {
             self.current.begin_scope();
             let closing_location = self.block()?;
@@ -173,6 +178,37 @@ impl<'a, 'gc> Parser<'a, 'gc> {
 
         self.chunk.write(Op::Print, location);
         Ok(())
+    }
+
+    fn if_statement(&mut self, location: SourceSpan) -> Result<()> {
+        consume!(self, TokenType::LeftParen, "Expected '(' after if");
+        self.expression()?;
+        let right_paren_location =
+            consume!(self, TokenType::RightParen, "Expected ')' after condition");
+        let location = location.until(right_paren_location);
+        let then_jump = self.emit_jump(Op::JumpIfFalse, location);
+        self.statement()?;
+
+        self.patch_jump(then_jump, Op::JumpIfFalse, location)
+    }
+
+    fn emit_jump(&mut self, op: fn(u16) -> Op, location: SourceSpan) -> usize {
+        let position = self.chunk.code.len();
+        self.chunk.write(op(0), location);
+        position
+    }
+
+    fn patch_jump(&mut self, offset: usize, op: fn(u16) -> Op, location: SourceSpan) -> Result<()> {
+        let jump = self.chunk.code.len() - offset;
+        if let Ok(jump) = u16::try_from(jump) {
+            self.chunk.code[offset] = op(jump);
+            Ok(())
+        } else {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(location, "here")],
+                "Too much code to jump over"
+            )
+        }
     }
 
     fn expression_statement(&mut self) -> Result<()> {
