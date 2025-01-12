@@ -107,6 +107,13 @@ impl Chunk {
                 offset,
                 offset + (*jump as usize)
             )?,
+            Op::Loop(jump) => write!(
+                &mut result,
+                "{:<16} {:0>4} -> {:0>4}",
+                op,
+                offset,
+                offset - (*jump as usize)
+            )?,
             op => write!(&mut result, "{op}")?,
         }
         Ok((result, line_number))

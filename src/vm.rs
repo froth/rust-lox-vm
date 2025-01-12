@@ -187,6 +187,9 @@ impl VM {
                 Op::Jump(offset) => unsafe {
                     self.ip = self.ip.add((offset - 1) as usize);
                 },
+                Op::Loop(offset) => unsafe {
+                    self.ip = self.ip.sub((offset + 1) as usize);
+                },
             }
         }
     }
