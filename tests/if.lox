@@ -1,0 +1,21 @@
+interpret
+if (false) {
+    print true;
+} else {
+    print false;
+}
+if (true) {
+    print true;
+} else {
+    print false;
+}
+if (false) {
+    print "true1";
+}
+if (true) {
+    print "true2";
+}
+----
+false
+true
+true2

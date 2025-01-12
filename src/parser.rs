@@ -185,11 +185,26 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         self.expression()?;
         let right_paren_location =
             consume!(self, TokenType::RightParen, "Expected ')' after condition");
+
         let location = location.until(right_paren_location);
         let then_jump = self.emit_jump(Op::JumpIfFalse, location);
+        self.chunk.write(Op::Pop, location);
+
         self.statement()?;
 
-        self.patch_jump(then_jump, Op::JumpIfFalse, location)
+        let else_jump = self.emit_jump(Op::Jump, location);
+
+        self.patch_jump(then_jump, Op::JumpIfFalse, location)?;
+        self.chunk.write(Op::Pop, location);
+
+        let mut else_location = None;
+        if let Some(else_token) = match_token!(self.scanner, TokenType::Else)? {
+            self.statement()?;
+            else_location = Some(else_token.location);
+        }
+        self.patch_jump(else_jump, Op::Jump, else_location.unwrap_or(location))?;
+
+        Ok(())
     }
 
     fn emit_jump(&mut self, op: fn(u16) -> Op, location: SourceSpan) -> usize {

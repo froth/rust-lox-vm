@@ -98,11 +98,11 @@ impl VM {
     fn interpret_inner(&mut self, src: &NamedSource<String>) -> miette::Result<()> {
         loop {
             let op = unsafe { *self.ip };
+            debug!("{}", self.current.disassemble_at(src, self.current_index()));
+            debug!("          {}", self.trace_stack());
             unsafe {
                 self.ip = self.ip.add(1);
             }
-            debug!("{}", self.current.disassemble_at(src, self.current_index()));
-            debug!("          {}", self.trace_stack());
             match op {
                 Op::Return => return Ok(()),
                 Op::Constant(index) => {
@@ -184,6 +184,10 @@ impl VM {
                         unsafe { self.ip = self.ip.add((offset - 1) as usize) }
                     }
                 }
+                Op::Jump(offset) => unsafe {
+                    self.ip = self.ip.add((offset - 1) as usize);
+                    println!("{}", *self.ip);
+                },
             }
         }
     }
