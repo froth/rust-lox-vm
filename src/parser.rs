@@ -374,6 +374,8 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             TokenType::LessEqual => {
                 self.binary(Op::Greater, Some(Op::Not), Precedence::Term, token.location)
             }
+            TokenType::And => self.and(token.location),
+            TokenType::Or => self.or(token.location),
             _ => unreachable!(), // guarded by infix_precedence
         }
     }
@@ -406,6 +408,24 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             TokenType::RightParen,
             "Expected ')' after Expression"
         );
+        Ok(())
+    }
+
+    fn and(&mut self, location: SourceSpan) -> Result<()> {
+        let end_jump = self.emit_jump(Op::JumpIfFalse, location);
+        self.chunk.write(Op::Pop, location);
+        self.parse_precedence(Precedence::And)?;
+        self.patch_jump(end_jump, Op::JumpIfFalse, location)?;
+        Ok(())
+    }
+
+    fn or(&mut self, location: SourceSpan) -> Result<()> {
+        let else_jump = self.emit_jump(Op::JumpIfFalse, location);
+        let end_jump = self.emit_jump(Op::Jump, location);
+        self.patch_jump(else_jump, Op::JumpIfFalse, location)?;
+        self.chunk.write(Op::Pop, location);
+        self.parse_precedence(Precedence::Or)?;
+        self.patch_jump(end_jump, Op::Jump, location)?;
         Ok(())
     }
 }

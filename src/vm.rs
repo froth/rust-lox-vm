@@ -186,7 +186,6 @@ impl VM {
                 }
                 Op::Jump(offset) => unsafe {
                     self.ip = self.ip.add((offset - 1) as usize);
-                    println!("{}", *self.ip);
                 },
             }
         }
