@@ -1,0 +1,82 @@
+error
+for ;
+for (var a =1) {}
+for (;) {}
+for (;;a = a+ 1 {}
+----
+----
+{
+  "causes": [],
+  "filename": "",
+  "labels": [],
+  "message": "Parser Error",
+  "related": [
+    {
+      "causes": [],
+      "filename": "tests/for_syntax_errors.lox",
+      "labels": [
+        {
+          "label": "here",
+          "span": {
+            "length": 1,
+            "offset": 4
+          }
+        }
+      ],
+      "message": "Expected '(' after for",
+      "related": [],
+      "severity": "error"
+    },
+    {
+      "causes": [],
+      "filename": "tests/for_syntax_errors.lox",
+      "labels": [
+        {
+          "label": "here",
+          "span": {
+            "length": 1,
+            "offset": 19
+          }
+        }
+      ],
+      "message": "Expected ';' after value",
+      "related": [],
+      "severity": "error"
+    },
+    {
+      "causes": [],
+      "filename": "tests/for_syntax_errors.lox",
+      "labels": [
+        {
+          "label": "here",
+          "span": {
+            "length": 1,
+            "offset": 30
+          }
+        }
+      ],
+      "message": "Expected expression but got `)`",
+      "related": [],
+      "severity": "error"
+    },
+    {
+      "causes": [],
+      "filename": "tests/for_syntax_errors.lox",
+      "labels": [
+        {
+          "label": "here",
+          "span": {
+            "length": 1,
+            "offset": 42
+          }
+        }
+      ],
+      "message": "Can't read local variable in its own initializer",
+      "related": [],
+      "severity": "error"
+    }
+  ],
+  "severity": "error"
+}
+----
+---- (no newline)
