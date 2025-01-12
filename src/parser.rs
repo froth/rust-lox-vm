@@ -29,6 +29,11 @@ pub struct ParseErrors {
     #[related]
     pub parser_errors: Vec<Report>,
 }
+struct Jump {
+    op: fn(u16) -> Op,
+    location: SourceSpan,
+    position: usize,
+}
 
 impl<'a, 'gc> Parser<'a, 'gc> {
     fn new(src: &'a NamedSource<String>, gc: &'gc mut Gc) -> Self {
@@ -194,33 +199,35 @@ impl<'a, 'gc> Parser<'a, 'gc> {
 
         let else_jump = self.emit_jump(Op::Jump, location);
 
-        self.patch_jump(then_jump, Op::JumpIfFalse, location)?;
+        self.patch_jump(then_jump)?;
         self.chunk.write(Op::Pop, location);
 
-        let mut else_location = None;
-        if let Some(else_token) = match_token!(self.scanner, TokenType::Else)? {
+        if match_token!(self.scanner, TokenType::Else)?.is_some() {
             self.statement()?;
-            else_location = Some(else_token.location);
         }
-        self.patch_jump(else_jump, Op::Jump, else_location.unwrap_or(location))?;
+        self.patch_jump(else_jump)?;
 
         Ok(())
     }
 
-    fn emit_jump(&mut self, op: fn(u16) -> Op, location: SourceSpan) -> usize {
+    fn emit_jump(&mut self, op: fn(u16) -> Op, location: SourceSpan) -> Jump {
         let position = self.chunk.code.len();
         self.chunk.write(op(0), location);
-        position
+        Jump {
+            op,
+            location,
+            position,
+        }
     }
 
-    fn patch_jump(&mut self, offset: usize, op: fn(u16) -> Op, location: SourceSpan) -> Result<()> {
-        let jump = self.chunk.code.len() - offset;
-        if let Ok(jump) = u16::try_from(jump) {
-            self.chunk.code[offset] = op(jump);
+    fn patch_jump(&mut self, jump: Jump) -> Result<()> {
+        let jump_length = self.chunk.code.len() - jump.position;
+        if let Ok(jump_length) = u16::try_from(jump_length) {
+            self.chunk.code[jump.position] = (jump.op)(jump_length);
             Ok(())
         } else {
             miette::bail!(
-                labels = vec![LabeledSpan::at(location, "here")],
+                labels = vec![LabeledSpan::at(jump.location, "here")],
                 "Too much code to jump over"
             )
         }
@@ -415,17 +422,17 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         let end_jump = self.emit_jump(Op::JumpIfFalse, location);
         self.chunk.write(Op::Pop, location);
         self.parse_precedence(Precedence::And)?;
-        self.patch_jump(end_jump, Op::JumpIfFalse, location)?;
+        self.patch_jump(end_jump)?;
         Ok(())
     }
 
     fn or(&mut self, location: SourceSpan) -> Result<()> {
         let else_jump = self.emit_jump(Op::JumpIfFalse, location);
         let end_jump = self.emit_jump(Op::Jump, location);
-        self.patch_jump(else_jump, Op::JumpIfFalse, location)?;
+        self.patch_jump(else_jump)?;
         self.chunk.write(Op::Pop, location);
         self.parse_precedence(Precedence::Or)?;
-        self.patch_jump(end_jump, Op::Jump, location)?;
+        self.patch_jump(end_jump)?;
         Ok(())
     }
 }
