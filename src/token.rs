@@ -107,6 +107,8 @@ impl TokenType<'_> {
             Star | Slash => Precedence::Factor,
             EqualEqual | BangEqual => Precedence::Equality,
             Greater | GreaterEqual | Less | LessEqual => Precedence::Comparision,
+            Or => Precedence::Or,
+            And => Precedence::And,
             _ => Precedence::None,
         }
     }

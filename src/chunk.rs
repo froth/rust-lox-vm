@@ -100,6 +100,13 @@ impl Chunk {
             Op::GetLocal(slot) | Op::SetLocal(slot) => {
                 write!(&mut result, "{:<16} {:<4}", op, slot)?
             }
+            Op::JumpIfFalse(jump) | Op::Jump(jump) => write!(
+                &mut result,
+                "{:<16} {:0>4} -> {:0>4}",
+                op,
+                offset,
+                offset + (*jump as usize)
+            )?,
             op => write!(&mut result, "{op}")?,
         }
         Ok((result, line_number))
