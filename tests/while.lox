@@ -1,0 +1,16 @@
+interpret
+var a = 0;
+while (a<5) {
+    print a;
+    a = a + 1;
+}
+
+while (a <5) {
+    print "NO";
+}
+----
+0
+1
+2
+3
+4
