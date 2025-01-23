@@ -2,8 +2,7 @@ use miette::{ByteOffset, Diagnostic, LabeledSpan, NamedSource, Report, Result, S
 use tracing::debug;
 
 use crate::{
-    chunk::Chunk,
-    compiler::Compiler,
+    compiler::{Compiler, FunctionType},
     consume,
     gc::Gc,
     match_token,
@@ -11,13 +10,12 @@ use crate::{
     scanner::Scanner,
     source_span_extensions::SourceSpanExtensions,
     token::{Precedence, Token, TokenType},
-    types::value::Value,
+    types::{obj::Obj, value::Value},
 };
 
 pub struct Parser<'a, 'gc> {
     scanner: Scanner<'a>,
     eof: ByteOffset,
-    chunk: Chunk,
     gc: &'gc mut Gc,
     errors: Vec<Report>,
     current: Compiler<'a>,
@@ -42,25 +40,25 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         Parser {
             scanner,
             eof,
-            chunk: Chunk::new(),
             gc,
             errors: vec![],
-            current: Compiler::new(),
+            current: Compiler::new(FunctionType::Script),
         }
     }
 
-    pub fn compile(src: &'a NamedSource<String>, gc: &'gc mut Gc) -> Result<Chunk> {
+    pub fn compile(src: &'a NamedSource<String>, gc: &'gc mut Gc) -> Result<Obj> {
         let mut parser: Parser<'_, '_> = Parser::new(src, gc);
 
         while parser.scanner.peek().is_some() {
             parser.declaration();
         }
         parser
+            .current
             .chunk
             .write(Op::Return, SourceSpan::new(parser.eof.into(), 1));
-        debug!("\n{}", parser.chunk.disassemble(src));
+        debug!("\n{}", parser.current.chunk.disassemble(src));
         if parser.errors.is_empty() {
-            Ok(parser.chunk)
+            Ok(Obj::Function(parser.current.end_compiler()))
         } else {
             Err(ParseErrors {
                 parser_errors: parser.errors,
@@ -108,7 +106,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         if (match_token!(self.scanner, TokenType::Equal)?).is_some() {
             self.expression()?;
         } else {
-            self.chunk.write(Op::Nil, location);
+            self.current.chunk.write(Op::Nil, location);
         }
         let semicolon_location = consume!(self, TokenType::Semicolon, "Expected ';' after value");
         self.define_variable(global, location.until(semicolon_location));
@@ -117,7 +115,9 @@ impl<'a, 'gc> Parser<'a, 'gc> {
 
     fn define_variable(&mut self, global_idx: Option<u8>, location: SourceSpan) {
         if let Some(const_idx) = global_idx {
-            self.chunk.write(Op::DefineGlobal(const_idx), location);
+            self.current
+                .chunk
+                .write(Op::DefineGlobal(const_idx), location);
         } else {
             self.current.mark_latest_initialized();
         }
@@ -155,7 +155,8 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     }
 
     fn identifier_constant(&mut self, name: &str) -> u8 {
-        self.chunk
+        self.current
+            .chunk
             .add_constant(Value::Obj(self.gc.manage_str(name)))
     }
 
@@ -182,7 +183,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         self.expression()?;
         consume!(self, TokenType::Semicolon, "Expected ';' after value");
 
-        self.chunk.write(Op::Print, location);
+        self.current.chunk.write(Op::Print, location);
         Ok(())
     }
 
@@ -194,14 +195,14 @@ impl<'a, 'gc> Parser<'a, 'gc> {
 
         let location = location.until(right_paren_location);
         let then_jump = self.emit_jump(Op::JumpIfFalse, location);
-        self.chunk.write(Op::Pop, location);
+        self.current.chunk.write(Op::Pop, location);
 
         self.statement()?;
 
         let else_jump = self.emit_jump(Op::Jump, location);
 
         self.patch_jump(then_jump)?;
-        self.chunk.write(Op::Pop, location);
+        self.current.chunk.write(Op::Pop, location);
 
         if match_token!(self.scanner, TokenType::Else)?.is_some() {
             self.statement()?;
@@ -212,7 +213,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     }
 
     fn while_statement(&mut self, location: SourceSpan) -> Result<()> {
-        let loop_start = self.chunk.code.len();
+        let loop_start = self.current.chunk.code.len();
         consume!(self, TokenType::LeftParen, "Expected '(' after while");
         self.expression()?;
         let right_paren_location =
@@ -220,14 +221,14 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         let location = location.until(right_paren_location);
 
         let exit_jump = self.emit_jump(Op::JumpIfFalse, location);
-        self.chunk.write(Op::Pop, location);
+        self.current.chunk.write(Op::Pop, location);
 
         self.statement()?;
 
         self.emit_loop(loop_start, location)?;
 
         self.patch_jump(exit_jump)?;
-        self.chunk.write(Op::Pop, location);
+        self.current.chunk.write(Op::Pop, location);
         Ok(())
     }
 
@@ -242,7 +243,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             self.expression_statement()?;
         }
 
-        let mut loop_start = self.chunk.code.len();
+        let mut loop_start = self.current.chunk.code.len();
         let mut exit_jump = None;
 
         if match_token!(self.scanner, TokenType::Semicolon)?.is_none() {
@@ -253,13 +254,13 @@ impl<'a, 'gc> Parser<'a, 'gc> {
                 "Expected ';' after loop condition"
             );
             exit_jump = Some(self.emit_jump(Op::JumpIfFalse, semicolon_location));
-            self.chunk.write(Op::Pop, semicolon_location);
+            self.current.chunk.write(Op::Pop, semicolon_location);
         }
         if match_token!(self.scanner, TokenType::RightParen)?.is_none() {
             let body_jump = self.emit_jump(Op::Jump, location);
-            let increment_start = self.chunk.code.len();
+            let increment_start = self.current.chunk.code.len();
             self.expression()?;
-            self.chunk.write(Op::Pop, location);
+            self.current.chunk.write(Op::Pop, location);
             consume!(
                 self,
                 TokenType::RightParen,
@@ -275,15 +276,15 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         self.emit_loop(loop_start, location)?;
         if let Some(exit_jump) = exit_jump {
             self.patch_jump(exit_jump)?;
-            self.chunk.write(Op::Pop, location);
+            self.current.chunk.write(Op::Pop, location);
         }
         self.end_scope(location);
         Ok(())
     }
 
     fn emit_jump(&mut self, op: fn(u16) -> Op, location: SourceSpan) -> Jump {
-        let position = self.chunk.code.len();
-        self.chunk.write(op(0), location);
+        let position = self.current.chunk.code.len();
+        self.current.chunk.write(op(0), location);
         Jump {
             op,
             location,
@@ -292,9 +293,9 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     }
 
     fn emit_loop(&mut self, loop_start: usize, location: SourceSpan) -> Result<()> {
-        let jump_length = self.chunk.code.len() - loop_start;
+        let jump_length = self.current.chunk.code.len() - loop_start;
         if let Ok(jump_length) = u16::try_from(jump_length) {
-            self.chunk.write(Op::Loop(jump_length), location);
+            self.current.chunk.write(Op::Loop(jump_length), location);
             Ok(())
         } else {
             miette::bail!(
@@ -305,9 +306,9 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     }
 
     fn patch_jump(&mut self, jump: Jump) -> Result<()> {
-        let jump_length = self.chunk.code.len() - jump.position;
+        let jump_length = self.current.chunk.code.len() - jump.position;
         if let Ok(jump_length) = u16::try_from(jump_length) {
-            self.chunk.code[jump.position] = (jump.op)(jump_length);
+            self.current.chunk.code[jump.position] = (jump.op)(jump_length);
             Ok(())
         } else {
             miette::bail!(
@@ -320,7 +321,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     fn expression_statement(&mut self) -> Result<()> {
         self.expression()?;
         let location = consume!(self, TokenType::Semicolon, "Expected ';' after value");
-        self.chunk.write(Op::Pop, location);
+        self.current.chunk.write(Op::Pop, location);
         Ok(())
     }
 
@@ -396,8 +397,8 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     }
 
     fn emit_constant(&mut self, value: Value, location: SourceSpan) {
-        let idx = self.chunk.add_constant(value);
-        self.chunk.write(Op::Constant(idx), location);
+        let idx = self.current.chunk.add_constant(value);
+        self.current.chunk.write(Op::Constant(idx), location);
     }
 
     fn named_variable(&mut self, name: &str, can_assign: bool, location: SourceSpan) -> Result<()> {
@@ -416,9 +417,9 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         };
         if can_assign && match_token!(self.scanner, TokenType::Equal)?.is_some() {
             self.expression()?;
-            self.chunk.write(set_op, location);
+            self.current.chunk.write(set_op, location);
         } else {
-            self.chunk.write(get_op, location);
+            self.current.chunk.write(get_op, location);
         }
         Ok(())
     }
@@ -429,9 +430,9 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             TokenType::Minus => self.unary(Op::Negate, token.location)?,
             TokenType::Bang => self.unary(Op::Not, token.location)?,
             TokenType::Number(f) => self.emit_constant(Value::Number(f), token.location),
-            TokenType::Nil => self.chunk.write(Op::Nil, token.location),
-            TokenType::True => self.chunk.write(Op::True, token.location),
-            TokenType::False => self.chunk.write(Op::False, token.location),
+            TokenType::Nil => self.current.chunk.write(Op::Nil, token.location),
+            TokenType::True => self.current.chunk.write(Op::True, token.location),
+            TokenType::False => self.current.chunk.write(Op::False, token.location),
             TokenType::String(s) => {
                 let obj = self.gc.manage_str(s);
                 self.emit_constant(Value::Obj(obj), token.location)
@@ -479,16 +480,16 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         location: SourceSpan,
     ) -> Result<()> {
         self.parse_precedence(precedence)?;
-        self.chunk.write(op, location);
+        self.current.chunk.write(op, location);
         if let Some(o) = second_op {
-            self.chunk.write(o, location)
+            self.current.chunk.write(o, location)
         }
         Ok(())
     }
 
     fn unary(&mut self, op: Op, location: SourceSpan) -> Result<()> {
         self.expression()?;
-        self.chunk.write(op, location);
+        self.current.chunk.write(op, location);
         Ok(())
     }
 
@@ -504,7 +505,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
 
     fn and(&mut self, location: SourceSpan) -> Result<()> {
         let end_jump = self.emit_jump(Op::JumpIfFalse, location);
-        self.chunk.write(Op::Pop, location);
+        self.current.chunk.write(Op::Pop, location);
         self.parse_precedence(Precedence::And)?;
         self.patch_jump(end_jump)?;
         Ok(())
@@ -514,7 +515,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         let else_jump = self.emit_jump(Op::JumpIfFalse, location);
         let end_jump = self.emit_jump(Op::Jump, location);
         self.patch_jump(else_jump)?;
-        self.chunk.write(Op::Pop, location);
+        self.current.chunk.write(Op::Pop, location);
         self.parse_precedence(Precedence::Or)?;
         self.patch_jump(end_jump)?;
         Ok(())
@@ -527,7 +528,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     fn end_scope(&mut self, location: SourceSpan) {
         let popped = self.current.end_scope();
         for _ in 0..popped {
-            self.chunk.write(Op::Pop, location);
+            self.current.chunk.write(Op::Pop, location);
         }
     }
 }

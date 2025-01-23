@@ -1,4 +1,8 @@
-use std::{fmt::Write as _, ops::Deref, ptr::null};
+use std::{
+    alloc::{self, Layout},
+    fmt::Write as _,
+    ops::Deref,
+};
 
 use miette::{LabeledSpan, NamedSource, SourceSpan};
 use tracing::debug;
@@ -11,19 +15,44 @@ use crate::{
     op::Op,
     parser::Parser,
     printer::{ConsolePrinter, Printer},
-    types::{obj::Obj, value::Value},
+    types::{function::Function, obj::Obj, value::Value},
 };
 
-const STACK_SIZE: usize = 256;
+const FRAMES_MAX: usize = 64;
+const STACK_MAX: usize = 256 * FRAMES_MAX; // us::
 
 pub struct VM {
-    stack: Box<[Value; STACK_SIZE]>,
+    stack: *mut Value,
     stack_top: *mut Value,
+    frames: *mut CallFrame,
+    frame_count: usize,
     gc: Gc,
     globals: HashTable,
     printer: Box<dyn Printer>,
-    current: Chunk,
+}
+
+struct CallFrame {
+    function: *const Function,
     ip: *const Op,
+    slots: *mut Value,
+}
+
+impl CallFrame {
+    fn chunk(&self) -> &Chunk {
+        unsafe { (*self.function).chunk() }
+    }
+    fn current_index(&self) -> usize {
+        unsafe { self.ip.offset_from(&(*self.function).chunk().code[0]) as usize }
+    }
+
+    fn current_location(&self) -> SourceSpan {
+        self.chunk().locations[self.current_index()]
+    }
+
+    fn disassemble_at_current_index(&mut self, src: &NamedSource<String>) -> String {
+        let current_index = self.current_index();
+        self.chunk().disassemble_at(src, current_index)
+    }
 }
 
 macro_rules! binary_operator {
@@ -35,7 +64,7 @@ macro_rules! binary_operator {
                 $self.push($constructor(a $op b));
             } else {
                 miette::bail!(
-                    labels = vec![LabeledSpan::at($self.current_location(), "here")],
+                    labels = vec![LabeledSpan::at($self.current_frame().current_location(), "here")],
                     "Operands for operation must be both be numbers"
                 );
             }
@@ -43,22 +72,29 @@ macro_rules! binary_operator {
     };
 }
 
+macro_rules! ip {
+    ($self: ident) => {
+        (*$self.frames.add($self.frame_count - 1)).ip
+    };
+}
+
 impl VM {
     pub fn new() -> Self {
-        let mut stack = Box::new([Value::Nil; STACK_SIZE]);
-        let stack_top = stack.as_mut_ptr();
+        //Safety: Layouts are guaranteed to be nonzero sized.
+        let stack =
+            unsafe { alloc::alloc(Layout::array::<Value>(STACK_MAX).unwrap()) as *mut Value };
+        let frames =
+            unsafe { alloc::alloc(Layout::array::<Value>(FRAMES_MAX).unwrap()) as *mut CallFrame };
         let gc = Gc::new();
         let globals = HashTable::new();
-        let chunk = Chunk::new();
-        let ip: *const Op = null();
         Self {
             stack,
-            stack_top,
+            stack_top: stack,
+            frames,
+            frame_count: 0,
             gc,
             globals,
             printer: Box::new(ConsolePrinter),
-            current: chunk,
-            ip,
         }
     }
 
@@ -66,12 +102,16 @@ impl VM {
         &mut self,
         src: NamedSource<String>,
     ) -> std::result::Result<(), InterpreterError> {
-        let chunk = match Parser::compile(&src, &mut self.gc) {
+        let function = match Parser::compile(&src, &mut self.gc) {
             Ok(c) => c,
             Err(e) => return Err(InterpreterError::CompileError(e.with_source_code(src))),
         };
 
-        self.set_chunk(chunk);
+        let function = self.gc.manage(function);
+        self.push(Value::Obj(function));
+        let arg_count = 0;
+        self.call_value(self.peek(arg_count), arg_count)
+            .map_err(|e| InterpreterError::RuntimeError(e.with_source_code(src.clone())))?;
 
         match self.interpret_inner(&src) {
             Ok(value) => Ok(value),
@@ -82,31 +122,25 @@ impl VM {
         }
     }
 
-    fn set_chunk(&mut self, chunk: Chunk) {
-        self.ip = &chunk.code[0];
-        self.current = chunk;
-    }
-
-    fn current_index(&self) -> usize {
-        unsafe { self.ip.offset_from(&self.current.code[0]) as usize }
-    }
-
-    fn current_location(&self) -> SourceSpan {
-        self.current.locations[self.current_index()]
-    }
-
     fn interpret_inner(&mut self, src: &NamedSource<String>) -> miette::Result<()> {
         loop {
-            let op = unsafe { *self.ip };
-            debug!("{}", self.current.disassemble_at(src, self.current_index()));
+            let op = unsafe { *ip!(self) };
+            debug!("{}", self.current_frame().disassemble_at_current_index(src));
             debug!("          {}", self.trace_stack());
             unsafe {
-                self.ip = self.ip.add(1);
+                ip!(self) = ip!(self).add(1);
             }
             match op {
-                Op::Return => return Ok(()),
+                Op::Return => {
+                    self.frame_count -= 1;
+                    if self.frame_count == 0 {
+                        self.pop();
+                        return Ok(());
+                    }
+                    todo!()
+                }
                 Op::Constant(index) => {
-                    let constant = self.current.constants[index as usize];
+                    let constant = self.current_frame().chunk().constants[index as usize];
                     self.push(constant);
                 }
                 Op::Nil => self.push(Value::Nil),
@@ -119,7 +153,10 @@ impl VM {
                         self.push(Value::Number(-number));
                     } else {
                         miette::bail!(
-                            labels = vec![LabeledSpan::at(self.current_location(), "here")],
+                            labels = vec![LabeledSpan::at(
+                                self.current_frame().current_location(),
+                                "here"
+                            )],
                             "Operand for unary - must be a number"
                         );
                     }
@@ -147,49 +184,95 @@ impl VM {
                     self.pop();
                 }
                 Op::DefineGlobal(index) => {
-                    let name = self.current.constants[index as usize];
+                    let name = self.current_frame().chunk().constants[index as usize];
                     self.globals.insert(name, self.peek(0));
                     self.pop();
                 }
                 Op::GetGlobal(index) => {
-                    let name = self.current.constants[index as usize];
+                    let name = self.current_frame().chunk().constants[index as usize];
                     if let Some(v) = self.globals.get(name) {
                         self.push(v)
                     } else {
                         miette::bail!(
-                            labels = vec![LabeledSpan::at(self.current_location(), "here")],
+                            labels = vec![LabeledSpan::at(
+                                self.current_frame().current_location(),
+                                "here"
+                            )],
                             "Undefined variable {}",
                             name
                         )
                     }
                 }
                 Op::SetGlobal(index) => {
-                    let name = self.current.constants[index as usize];
+                    let name = self.current_frame().chunk().constants[index as usize];
                     let inserted = self.globals.insert(name, self.peek(0));
                     if inserted {
                         self.globals.delete(name);
                         miette::bail!(
-                            labels = vec![LabeledSpan::at(self.current_location(), "here")],
+                            labels = vec![LabeledSpan::at(
+                                self.current_frame().current_location(),
+                                "here"
+                            )],
                             "Undefined variable {}",
                             name
                         )
                     }
                 }
-                Op::GetLocal(slot) => {
-                    self.push(self.stack[slot as usize]);
-                }
-                Op::SetLocal(slot) => self.stack[slot as usize] = self.peek(0),
+                Op::GetLocal(slot) => unsafe {
+                    let slots = self.current_frame().slots;
+                    self.push(*(slots.add(slot as usize)));
+                },
+                Op::SetLocal(slot) => unsafe {
+                    let slots = self.current_frame().slots;
+                    *(slots.add(slot as usize)) = self.peek(0)
+                },
                 Op::JumpIfFalse(offset) => {
                     if self.peek(0).is_falsey() {
-                        unsafe { self.ip = self.ip.add((offset - 1) as usize) }
+                        unsafe { ip!(self) = ip!(self).add((offset - 1) as usize) }
                     }
                 }
                 Op::Jump(offset) => unsafe {
-                    self.ip = self.ip.add((offset - 1) as usize);
+                    ip!(self) = ip!(self).add((offset - 1) as usize);
                 },
                 Op::Loop(offset) => unsafe {
-                    self.ip = self.ip.sub((offset + 1) as usize);
+                    ip!(self) = ip!(self).sub((offset + 1) as usize);
                 },
+            }
+        }
+    }
+
+    fn current_frame(&mut self) -> &mut CallFrame {
+        unsafe { &mut *self.frames.add(self.frame_count - 1) }
+    }
+
+    fn call_value(&mut self, callee: Value, arg_count: usize) -> miette::Result<()> {
+        unsafe {
+            if let Value::Obj(obj) = callee {
+                match obj.deref() {
+                    Obj::Function(function) => {
+                        let frame = self.frames.add(self.frame_count);
+                        (*frame).function = function;
+                        (*frame).ip = function.chunk().code.ptr();
+                        (*frame).slots = self.stack_top.sub(arg_count + 1);
+                        self.frame_count += 1;
+                        Ok(())
+                    }
+                    _ => miette::bail!(
+                        labels = vec![LabeledSpan::at(
+                            self.current_frame().current_location(),
+                            "here"
+                        )],
+                        "Can only call functions or classes.",
+                    ),
+                }
+            } else {
+                miette::bail!(
+                    labels = vec![LabeledSpan::at(
+                        self.current_frame().current_location(),
+                        "here"
+                    )],
+                    "Can only call functions or classes.",
+                )
             }
         }
     }
@@ -209,13 +292,19 @@ impl VM {
                     self.push(Value::Obj(concated));
                 } else {
                     miette::bail!(
-                        labels = vec![LabeledSpan::at(self.current_location(), "here")],
+                        labels = vec![LabeledSpan::at(
+                            self.current_frame().current_location(),
+                            "here"
+                        )],
                         "Operands for operation must be both be numbers or Strings"
                     )
                 }
             }
             _ => miette::bail!(
-                labels = vec![LabeledSpan::at(self.current_location(), "here")],
+                labels = vec![LabeledSpan::at(
+                    self.current_frame().current_location(),
+                    "here"
+                )],
                 "Operands for operation must be both be numbers or Strings"
             ),
         }
@@ -244,7 +333,7 @@ impl VM {
 
     fn trace_stack(&self) -> String {
         let mut res = String::new();
-        let mut current = self.stack.as_ptr();
+        let mut current = self.stack;
         while current != self.stack_top {
             let value = unsafe { *current };
             write!(&mut res, "[ {} ]", value).unwrap();
@@ -254,7 +343,23 @@ impl VM {
     }
 
     fn reset_stack(&mut self) {
-        self.stack_top = self.stack.as_mut_ptr();
+        self.stack_top = self.stack;
+    }
+}
+
+impl Drop for VM {
+    fn drop(&mut self) {
+        //Safety: Layouts are same as in new.
+        unsafe {
+            alloc::dealloc(
+                self.stack as *mut u8,
+                Layout::array::<Value>(STACK_MAX).unwrap(),
+            );
+            alloc::dealloc(
+                self.frames as *mut u8,
+                Layout::array::<Value>(FRAMES_MAX).unwrap(),
+            );
+        }
     }
 }
 
@@ -285,7 +390,7 @@ mod tests {
                 let mut vm = VM::with_printer(Box::new(printer.clone()));
                 let named_source = NamedSource::new(file_name.clone(), input.clone());
                 let result = vm.interpret(named_source);
-                assert_eq!(vm.stack_top, vm.stack.as_mut_ptr(), "Stack is not empty");
+                assert_eq!(vm.stack_top, vm.stack, "Stack is not empty");
                 if test_case.directive == "error" {
                     let err = result.expect_err(
                         format!("Test {file_name} meant to be failing but succeeded").as_str(),
@@ -302,6 +407,18 @@ mod tests {
                 }
             })
         });
+    }
+
+    // miri can not run on integration tests, as they require fileaccess
+    #[test]
+    fn miri_test() {
+        let input = "for (var a = 1; a<5; a = a +1) {print a;}".to_string();
+        let printer = VecPrinter::new();
+        let mut vm = VM::with_printer(Box::new(printer.clone()));
+        let named_source = NamedSource::new("miri_test", input.clone());
+        vm.interpret(named_source).unwrap();
+        assert_eq!(vm.stack_top, vm.stack, "Stack is not empty");
+        assert_eq!(printer.get_output(), "1\n2\n3\n4\n");
     }
 
     fn format_json(json: String) -> String {

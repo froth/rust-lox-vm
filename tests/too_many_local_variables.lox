@@ -256,7 +256,6 @@ error
     var a254;
     var a255;
     var a256;
-    var a257;
 }
 ----
 ----
@@ -274,7 +273,7 @@ error
           "label": "here",
           "span": {
             "length": 4,
-            "offset": 3486
+            "offset": 3472
           }
         }
       ],

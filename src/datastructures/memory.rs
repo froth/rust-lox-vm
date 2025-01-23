@@ -3,6 +3,7 @@ use std::{
     ptr::NonNull,
 };
 
+//TODO: do we really need this, do we want to include this in GC triggers or do we limit ourselves on Obj allocations?
 pub fn grow_capacity(capacity: usize) -> usize {
     if capacity < 8 {
         8
