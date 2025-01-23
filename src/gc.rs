@@ -36,8 +36,15 @@ impl Gc {
     }
 
     fn manage_lox_string(&mut self, lox_string: LoxString) -> ObjRef {
+        let obj = Obj::String(lox_string);
+        let obj_ref = self.manage(obj);
+        // intern the string
+        self.strings.insert(Value::Obj(obj_ref), Value::Nil);
+        obj_ref
+    }
+
+    pub fn manage(&mut self, obj: Obj) -> ObjRef {
         unsafe {
-            let obj = Obj::String(lox_string);
             let old_head = self.head.take();
             let new_node = Box::into_raw(Box::new(Node {
                 next: old_head,
@@ -47,8 +54,6 @@ impl Gc {
             let obj_ptr: *mut Obj = &mut (*new_node.as_ptr()).obj;
             let obj_ref = ObjRef::new(NonNull::new_unchecked(obj_ptr));
             self.head = Some(new_node);
-            // intern the string
-            self.strings.insert(Value::Obj(obj_ref), Value::Nil);
             obj_ref
         }
     }
@@ -74,11 +79,11 @@ mod tests {
     fn push() {
         let mut gc = Gc::new();
         let one = gc.manage_str("asfsaf");
-        assert_eq!(*one, Obj::String(LoxString::from_str("asfsaf")));
+        assert_eq!(one.to_string(), "asfsaf");
         let two = gc.manage_str("sfdsdfsaf");
-        assert_eq!(*two, Obj::String(LoxString::from_str("sfdsdfsaf")));
+        assert_eq!(two.to_string(), "sfdsdfsaf");
         let three = gc.manage_str("sfdsasdasddfsaf");
-        assert_eq!(*three, Obj::String(LoxString::from_str("sfdsasdasddfsaf")));
+        assert_eq!(three.to_string(), "sfdsasdasddfsaf");
     }
 
     #[test]

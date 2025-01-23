@@ -52,6 +52,10 @@ impl<T> LoxVector<T> {
             unsafe { Some(ptr::read(self.ptr.as_ptr().add(self.count))) }
         }
     }
+
+    pub fn ptr(&self) -> *const T {
+        self.ptr.as_ptr()
+    }
 }
 
 impl<T> Drop for LoxVector<T> {

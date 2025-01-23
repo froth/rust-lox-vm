@@ -1,13 +1,22 @@
 use miette::{LabeledSpan, Result, SourceSpan};
+
+use crate::{chunk::Chunk, types::function::Function};
 #[derive(PartialEq, Debug)]
 struct Local<'a> {
     name: &'a str,
     depth: Option<u32>,
 }
 
+pub enum FunctionType {
+    Function,
+    Script,
+}
+
 pub struct Compiler<'a> {
+    function_type: FunctionType,
     locals: Vec<Local<'a>>,
     scope_depth: u32,
+    pub chunk: Chunk,
 }
 
 #[derive(PartialEq, Debug)]
@@ -17,10 +26,16 @@ pub struct ResolveResult {
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new() -> Self {
+    pub fn new(function_type: FunctionType) -> Self {
+        let slot_zero = Local {
+            name: "",
+            depth: Some(0),
+        };
         Self {
-            locals: vec![],
+            locals: vec![slot_zero],
             scope_depth: 0,
+            function_type,
+            chunk: Chunk::new(),
         }
     }
 
@@ -84,6 +99,10 @@ impl<'a> Compiler<'a> {
                 initialized: l.depth.is_some(),
             })
     }
+
+    pub fn end_compiler(self) -> Function {
+        Function::new(0, self.chunk, None) // TODO: Real names for real functions
+    }
 }
 
 #[cfg(test)]
@@ -92,14 +111,20 @@ mod tests {
 
     #[test]
     fn new_works() {
-        let compiler = Compiler::new();
-        assert_eq!(compiler.locals, vec![]);
+        let compiler = Compiler::new(FunctionType::Script);
+        assert_eq!(
+            compiler.locals,
+            vec![Local {
+                name: "",
+                depth: Some(0)
+            }]
+        ); // slot zero
         assert_eq!(compiler.scope_depth, 0);
     }
 
     #[test]
     fn has_variable_on_empty() {
-        let compiler = Compiler::new();
+        let compiler = Compiler::new(FunctionType::Script);
         assert!(!compiler.has_variable_in_current_scope("asdasd"));
     }
 
@@ -117,6 +142,8 @@ mod tests {
                 },
             ],
             scope_depth: 2,
+            function_type: FunctionType::Script,
+            chunk: Chunk::new(),
         };
         assert!(!compiler.has_variable_in_current_scope("a"));
     }
@@ -135,6 +162,8 @@ mod tests {
                 },
             ],
             scope_depth: 2,
+            function_type: FunctionType::Script,
+            chunk: Chunk::new(),
         };
         assert!(compiler.has_variable_in_current_scope("a"));
     }
@@ -157,6 +186,8 @@ mod tests {
                 },
             ],
             scope_depth: 2,
+            function_type: FunctionType::Script,
+            chunk: Chunk::new(),
         };
         assert!(compiler.has_variable_in_current_scope("b"));
     }
@@ -179,6 +210,8 @@ mod tests {
                 },
             ],
             scope_depth: 2,
+            function_type: FunctionType::Script,
+            chunk: Chunk::new(),
         };
         assert_eq!(compiler.end_scope(), 2);
     }
@@ -201,6 +234,8 @@ mod tests {
                 },
             ],
             scope_depth: 2,
+            function_type: FunctionType::Script,
+            chunk: Chunk::new(),
         };
         assert_eq!(
             compiler.resolve_locale("a"),
@@ -229,6 +264,8 @@ mod tests {
                 },
             ],
             scope_depth: 2,
+            function_type: FunctionType::Script,
+            chunk: Chunk::new(),
         };
         assert_eq!(
             compiler.resolve_locale("a"),
