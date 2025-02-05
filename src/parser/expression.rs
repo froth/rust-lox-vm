@@ -1,5 +1,3 @@
-use std::io::empty;
-
 use super::{Parser, Result};
 use crate::{
     check, consume, match_token,

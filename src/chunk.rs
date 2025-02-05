@@ -144,7 +144,7 @@ mod tests {
     fn disassemble_constant() {
         let src = "1.1".to_string();
         let src = Arc::new(NamedSource::new("src", src));
-        let mut chunk = Chunk::new(src.into());
+        let mut chunk = Chunk::new(src);
         let constant = chunk.add_constant(Value::Number(1.1));
         chunk.write(Op::Constant(constant), SourceSpan::from((0, 3)));
         let res = chunk.disassemble_at(0);
