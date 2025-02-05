@@ -13,6 +13,7 @@ struct Local<'a> {
     depth: Option<u32>,
 }
 
+#[derive(PartialEq, Debug)]
 pub enum FunctionType {
     Function,
     Script,
@@ -20,7 +21,7 @@ pub enum FunctionType {
 
 pub struct Compiler<'a> {
     pub enclosing: Option<Box<Compiler<'a>>>,
-    function_type: FunctionType,
+    pub function_type: FunctionType,
     pub function_name: Option<String>,
     pub arity: u8,
     locals: Vec<Local<'a>>,

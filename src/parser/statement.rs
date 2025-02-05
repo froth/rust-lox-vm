@@ -116,6 +116,8 @@ impl Parser<'_, '_> {
             self.for_statement(for_token.location)
         } else if let Some(if_token) = match_token!(self.scanner, TokenType::If)? {
             self.if_statement(if_token.location)
+        } else if let Some(return_token) = match_token!(self.scanner, TokenType::Return)? {
+            self.return_statement(return_token.location)
         } else if let Some(while_token) = match_token!(self.scanner, TokenType::While)? {
             self.while_statement(while_token.location)
         } else if (match_token!(self.scanner, TokenType::LeftBrace)?).is_some() {
@@ -158,6 +160,28 @@ impl Parser<'_, '_> {
         }
         self.current.patch_jump(else_jump)?;
 
+        Ok(())
+    }
+
+    fn return_statement(&mut self, location: SourceSpan) -> Result<()> {
+        if self.current.function_type == FunctionType::Script {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(location, "here")],
+                "Can't return from top-level code.",
+            )
+        }
+        if match_token!(self.scanner, TokenType::Semicolon)?.is_some() {
+            self.current.chunk.write(Op::Nil, location);
+            self.current.chunk.write(Op::Return, location);
+        } else {
+            self.expression()?;
+            consume!(
+                self,
+                TokenType::Semicolon,
+                "Expected ';' after return value"
+            );
+            self.current.chunk.write(Op::Return, location);
+        }
         Ok(())
     }
 
