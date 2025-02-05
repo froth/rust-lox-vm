@@ -97,8 +97,8 @@ impl Chunk {
                 let constant = self.constants[const_index];
                 write!(&mut result, "{:<16} {:<4} '{}'", op, const_index, constant)?;
             }
-            Op::GetLocal(slot) | Op::SetLocal(slot) => {
-                write!(&mut result, "{:<16} {:<4}", op, slot)?
+            Op::GetLocal(byte) | Op::SetLocal(byte) | Op::Call(byte) => {
+                write!(&mut result, "{:<16} {:<4}", op, byte)?
             }
             Op::JumpIfFalse(jump) | Op::Jump(jump) => write!(
                 &mut result,

@@ -1,11 +1,13 @@
+use std::io::empty;
+
 use super::{Parser, Result};
 use crate::{
-    consume, match_token,
+    check, consume, match_token,
     op::Op,
     token::{Precedence, Token, TokenType},
     types::value::Value,
 };
-use miette::{LabeledSpan, SourceSpan};
+use miette::{miette, LabeledSpan, SourceSpan};
 
 impl Parser<'_, '_> {
     pub(super) fn expression(&mut self) -> Result<()> {
@@ -122,6 +124,7 @@ impl Parser<'_, '_> {
             }
             TokenType::And => self.and(token.location),
             TokenType::Or => self.or(token.location),
+            TokenType::LeftParen => self.call(token.location),
             _ => unreachable!(), // guarded by infix_precedence
         }
     }
@@ -173,5 +176,38 @@ impl Parser<'_, '_> {
         self.parse_precedence(Precedence::Or)?;
         self.current.patch_jump(end_jump)?;
         Ok(())
+    }
+
+    fn call(&mut self, location: SourceSpan) -> Result<()> {
+        let arg_count = self.argument_list()?;
+        self.current.chunk.write(Op::Call(arg_count), location);
+        Ok(())
+    }
+
+    fn argument_list(&mut self) -> Result<u8> {
+        let mut arg_count: usize = 0;
+
+        if !check!(self.scanner, TokenType::RightParen) {
+            loop {
+                self.expression()?;
+                arg_count += 1;
+                if match_token!(self.scanner, TokenType::Comma)?.is_none() {
+                    break;
+                }
+            }
+        }
+
+        let closing_location = consume!(
+            self.scanner,
+            TokenType::RightParen,
+            "Expected ')' after arguments"
+        );
+
+        u8::try_from(arg_count).map_err(|_| {
+            miette!(
+                labels = vec![LabeledSpan::at(closing_location, "here")],
+                "Can't have more than 255 arguments.",
+            )
+        })
     }
 }

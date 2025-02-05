@@ -5,26 +5,22 @@ use crate::chunk::Chunk;
 use super::{string::LoxString, Hash, Hashable};
 
 pub struct Function {
-    arity: usize,
+    arity: u8,
     chunk: Chunk,
     name: Option<LoxString>,
 }
 
 impl Function {
-    pub fn new(arity: usize, chunk: Chunk, name: Option<LoxString>) -> Self {
+    pub fn new(arity: u8, chunk: Chunk, name: Option<LoxString>) -> Self {
         Self { arity, chunk, name }
     }
 
-    pub fn arity(&self) -> usize {
+    pub fn arity(&self) -> u8 {
         self.arity
     }
 
     pub fn chunk(&self) -> &Chunk {
         &self.chunk
-    }
-
-    pub fn name(&self) -> Option<&LoxString> {
-        self.name.as_ref()
     }
 }
 

@@ -1,11 +1,9 @@
-use std::mem::replace;
-
 use miette::{LabeledSpan, SourceSpan};
 
 use super::{Parser, Result};
 use crate::{
     check,
-    compiler::{Compiler, FunctionType},
+    compiler::FunctionType,
     consume, match_token,
     op::Op,
     source_span_extensions::SourceSpanExtensions,
@@ -103,7 +101,7 @@ impl Parser<'_, '_> {
         );
 
         let closing_location = self.block()?;
-        let function = self.end_compiler();
+        let function = self.end_compiler(closing_location);
         let obj_ref = self.gc.manage(Obj::Function(function));
         self.current
             .emit_constant(Value::Obj(obj_ref), closing_location);

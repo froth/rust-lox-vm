@@ -30,11 +30,6 @@ pub struct ParseErrors {
     pub parser_errors: Vec<Report>,
 }
 
-pub struct Variable<'a> {
-    pub const_index: Option<u8>,
-    name: &'a str,
-}
-
 impl<'a, 'gc> Parser<'a, 'gc> {
     fn new(src: &'a NamedSource<String>, gc: &'gc mut Gc) -> Self {
         let eof = src.inner().len().saturating_sub(1);
@@ -54,13 +49,12 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         while parser.scanner.peek().is_some() {
             parser.declaration();
         }
-        parser
-            .current
-            .chunk
-            .write(Op::Return, SourceSpan::new(parser.eof.into(), 1));
+
         debug!("\n{}", parser.current.chunk.disassemble(src));
         if parser.errors.is_empty() {
-            Ok(Obj::Function(parser.end_compiler()))
+            Ok(Obj::Function(
+                parser.end_compiler(SourceSpan::new(parser.eof.into(), 1)),
+            ))
         } else {
             Err(ParseErrors {
                 parser_errors: parser.errors,
@@ -110,13 +104,15 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         self.current.enclosing = Some(Box::new(old_compiler));
     }
 
-    pub fn end_compiler(&mut self) -> Function {
+    pub fn end_compiler(&mut self, location: SourceSpan) -> Function {
+        self.current.chunk.write(Op::Nil, location);
+        self.current.chunk.write(Op::Return, location);
         let enclosing = self
             .current
             .enclosing
             .take()
             .unwrap_or(Box::new(Compiler::new(FunctionType::Script, None)));
         let old = replace(&mut self.current, *enclosing);
-        Function::new(0, old.chunk, old.function_name.map(LoxString::string)) // TODO: Real names for real functions
+        Function::new(0, old.chunk, old.function_name.map(LoxString::string))
     }
 }

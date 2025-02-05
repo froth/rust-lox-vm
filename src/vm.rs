@@ -110,7 +110,7 @@ impl VM {
         let function = self.gc.manage(function);
         self.push(Value::Obj(function));
         let arg_count = 0;
-        self.call_value(self.peek(arg_count), arg_count)
+        self.call_value(self.peek(arg_count), 0)
             .map_err(|e| InterpreterError::RuntimeError(e.with_source_code(src.clone())))?;
 
         match self.interpret_inner(&src) {
@@ -132,12 +132,15 @@ impl VM {
             }
             match op {
                 Op::Return => {
+                    let result = self.pop();
+                    let slots = self.current_frame().slots;
                     self.frame_count -= 1;
                     if self.frame_count == 0 {
                         self.pop();
                         return Ok(());
                     }
-                    todo!()
+                    self.stack_top = slots;
+                    self.push(result);
                 }
                 Op::Constant(index) => {
                     let constant = self.current_frame().chunk().constants[index as usize];
@@ -237,6 +240,10 @@ impl VM {
                 Op::Loop(offset) => unsafe {
                     ip!(self) = ip!(self).sub((offset + 1) as usize);
                 },
+                Op::Call(arg_count) => {
+                    let callee = self.peek(arg_count);
+                    self.call_value(callee, arg_count)?
+                }
             }
         }
     }
@@ -245,35 +252,55 @@ impl VM {
         unsafe { &mut *self.frames.add(self.frame_count - 1) }
     }
 
-    fn call_value(&mut self, callee: Value, arg_count: usize) -> miette::Result<()> {
-        unsafe {
-            if let Value::Obj(obj) = callee {
-                match obj.deref() {
-                    Obj::Function(function) => {
+    fn call_value(&mut self, callee: Value, arg_count: u8) -> miette::Result<()> {
+        if self.frame_count == FRAMES_MAX {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(
+                    self.current_frame().current_location(),
+                    "here"
+                )],
+                "Stack overflow",
+            )
+        }
+        if let Value::Obj(obj) = callee {
+            match obj.deref() {
+                Obj::Function(function) => {
+                    if function.arity() != arg_count {
+                        miette::bail!(
+                            labels = vec![LabeledSpan::at(
+                                self.current_frame().current_location(),
+                                "here"
+                            )],
+                            "Expected {} arguments but got {}",
+                            function.arity(),
+                            arg_count
+                        )
+                    }
+                    unsafe {
                         let frame = self.frames.add(self.frame_count);
                         (*frame).function = function;
                         (*frame).ip = function.chunk().code.ptr();
-                        (*frame).slots = self.stack_top.sub(arg_count + 1);
-                        self.frame_count += 1;
-                        Ok(())
+                        (*frame).slots = self.stack_top.sub(arg_count as usize + 1);
                     }
-                    _ => miette::bail!(
-                        labels = vec![LabeledSpan::at(
-                            self.current_frame().current_location(),
-                            "here"
-                        )],
-                        "Can only call functions or classes.",
-                    ),
+                    self.frame_count += 1;
+                    Ok(())
                 }
-            } else {
-                miette::bail!(
+                _ => miette::bail!(
                     labels = vec![LabeledSpan::at(
                         self.current_frame().current_location(),
                         "here"
                     )],
                     "Can only call functions or classes.",
-                )
+                ),
             }
+        } else {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(
+                    self.current_frame().current_location(),
+                    "here"
+                )],
+                "Can only call functions or classes.",
+            )
         }
     }
 
@@ -326,9 +353,9 @@ impl VM {
         }
     }
 
-    fn peek(&self, distance: usize) -> Value {
+    fn peek(&self, distance: u8) -> Value {
         // SAFETY: NOT SAFE, stack could overflow and underflow
-        unsafe { *self.stack_top.sub(1 + distance) }
+        unsafe { *self.stack_top.sub(1 + distance as usize) }
     }
 
     fn trace_stack(&self) -> String {

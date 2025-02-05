@@ -1,9 +1,9 @@
-use miette::{LabeledSpan, Result, SourceSpan};
+use miette::{LabeledSpan, NamedSource, Result, SourceSpan};
 
 use crate::{
     chunk::Chunk,
     op::Op,
-    types::{function::Function, obj_ref::ObjRef, value::Value},
+    types::{obj_ref::ObjRef, value::Value},
 };
 #[derive(PartialEq, Debug)]
 struct Local<'a> {
