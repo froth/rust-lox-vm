@@ -50,8 +50,9 @@ fn main() {
                         eprintln!("{:?}", err);
                         std::process::exit(65)
                     }
-                    InterpreterError::RuntimeError(err) => {
-                        eprintln!("{:?}", err);
+                    InterpreterError::RuntimeError { error, stacktrace } => {
+                        eprintln!("{:?}", error);
+                        eprintln!("{}", stacktrace);
                         std::process::exit(75)
                     }
                 }
@@ -97,7 +98,10 @@ fn run_prompt(mut vm: VM, args: Args) -> rustyline::Result<()> {
                 match vm.interpret(NamedSource::new("repl", source)) {
                     Ok(()) => (),
                     Err(InterpreterError::CompileError(err)) => println!("{:?}", err),
-                    Err(InterpreterError::RuntimeError(err)) => println!("{:?}", err),
+                    Err(InterpreterError::RuntimeError { error, stacktrace }) => {
+                        println!("{:?}", error);
+                        println!("{}", stacktrace);
+                    }
                 }
             }
             Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,

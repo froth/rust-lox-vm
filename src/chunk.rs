@@ -74,6 +74,11 @@ impl Chunk {
         }
     }
 
+    pub fn line_number(&self, at: usize) -> usize {
+        let location = self.locations[at];
+        self.source.read_span(&location, 0, 0).unwrap().line() + 1
+    }
+
     fn to_disassembled(
         &self,
         offset: usize,

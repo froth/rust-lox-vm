@@ -113,17 +113,20 @@ impl VM {
         self.push(Value::Obj(function));
         let arg_count = 0;
         self.call_value(self.peek(arg_count), 0)
-            .map_err(|e| InterpreterError::RuntimeError(e.with_source_code(src.clone())))?;
+            .map_err(|e| InterpreterError::RuntimeError {
+                error: e.with_source_code(src.clone()),
+                stacktrace: self.stacktrace(),
+            })?;
 
         self.sources.push(src);
 
         match self.interpret_inner() {
             Ok(value) => Ok(value),
             Err(e) => {
+                let stacktrace = self.stacktrace();
                 self.reset_stack();
-                Err(InterpreterError::RuntimeError(e.with_source_code(
-                    self.current_frame().chunk().source.clone(),
-                )))
+                let error = e.with_source_code(self.current_frame().chunk().source.clone());
+                Err(InterpreterError::RuntimeError { error, stacktrace })
             }
         }
     }
@@ -377,6 +380,24 @@ impl VM {
 
     fn reset_stack(&mut self) {
         self.stack_top = self.stack;
+    }
+
+    fn stacktrace(&self) -> String {
+        let mut trace = String::new();
+        for i in (0..(self.frame_count)).rev() {
+            unsafe {
+                let frame = self.frames.add(i);
+                let instruction = (*frame).ip.offset_from((*frame).chunk().code.ptr()) - 1;
+                let line = (*frame).chunk().line_number(instruction as usize);
+                let _ = write!(trace, "[line {}] in ", line);
+                if let Some(name) = (*(*frame).function).name() {
+                    let _ = writeln!(trace, "{}()", name.string);
+                } else {
+                    let _ = writeln!(trace, "script");
+                }
+            }
+        }
+        trace
     }
 }
 

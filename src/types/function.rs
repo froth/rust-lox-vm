@@ -22,6 +22,10 @@ impl Function {
     pub fn chunk(&self) -> &Chunk {
         &self.chunk
     }
+
+    pub fn name(&self) -> Option<&LoxString> {
+        self.name.as_ref()
+    }
 }
 
 impl Hashable for Function {
