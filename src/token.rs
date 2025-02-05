@@ -109,6 +109,7 @@ impl TokenType<'_> {
             Greater | GreaterEqual | Less | LessEqual => Precedence::Comparision,
             Or => Precedence::Or,
             And => Precedence::And,
+            LeftParen => Precedence::Call,
             _ => Precedence::None,
         }
     }

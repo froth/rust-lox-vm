@@ -51,6 +51,20 @@ macro_rules! match_token {
     }};
 }
 
+#[macro_export]
+macro_rules! check {
+    ($self:expr, $pattern:pat $(if $guard:expr)?) => {{
+        match $self.peek() {
+            Some(Err(_)) => false,
+            Some(Ok(a)) => match a.token_type {
+                $pattern $(if $guard)? => true,
+                _ => false
+            },
+            None => false,
+        }
+    }};
+}
+
 pub struct Scanner<'a> {
     src: &'a NamedSource<String>,
     rest: &'a str,
@@ -88,6 +102,10 @@ impl<'a> Scanner<'a> {
                 "Unexpected EOF"
             )
         })
+    }
+
+    pub fn previous_lexeme(&self) -> String {
+        self.src.inner().as_str()[self.start..self.at].to_string()
     }
 
     fn inner_advance(&mut self) -> Option<char> {

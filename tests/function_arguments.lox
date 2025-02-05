@@ -1,0 +1,18 @@
+interpret
+fun a(b) {
+    print b;
+}
+a("string");
+
+fun b(b) {
+    print b;
+    fun c() {
+        print "c";
+    }
+    c();
+}
+b(1);
+----
+string
+1
+c

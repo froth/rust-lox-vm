@@ -29,6 +29,7 @@ pub struct VM {
     gc: Gc,
     globals: HashTable,
     printer: Box<dyn Printer>,
+    sources: Vec<NamedSource<String>>,
 }
 
 struct CallFrame {
@@ -49,9 +50,9 @@ impl CallFrame {
         self.chunk().locations[self.current_index()]
     }
 
-    fn disassemble_at_current_index(&mut self, src: &NamedSource<String>) -> String {
+    fn disassemble_at_current_index(&mut self) -> String {
         let current_index = self.current_index();
-        self.chunk().disassemble_at(src, current_index)
+        self.chunk().disassemble_at(current_index)
     }
 }
 
@@ -95,6 +96,7 @@ impl VM {
             gc,
             globals,
             printer: Box::new(ConsolePrinter),
+            sources: vec![],
         }
     }
 
@@ -110,34 +112,44 @@ impl VM {
         let function = self.gc.manage(function);
         self.push(Value::Obj(function));
         let arg_count = 0;
-        self.call_value(self.peek(arg_count), arg_count)
-            .map_err(|e| InterpreterError::RuntimeError(e.with_source_code(src.clone())))?;
+        self.call_value(self.peek(arg_count), 0)
+            .map_err(|e| InterpreterError::RuntimeError {
+                error: e.with_source_code(src.clone()),
+                stacktrace: self.stacktrace(),
+            })?;
 
-        match self.interpret_inner(&src) {
+        self.sources.push(src);
+
+        match self.interpret_inner() {
             Ok(value) => Ok(value),
             Err(e) => {
+                let stacktrace = self.stacktrace();
                 self.reset_stack();
-                Err(InterpreterError::RuntimeError(e.with_source_code(src)))
+                let error = e.with_source_code(self.current_frame().chunk().source.clone());
+                Err(InterpreterError::RuntimeError { error, stacktrace })
             }
         }
     }
 
-    fn interpret_inner(&mut self, src: &NamedSource<String>) -> miette::Result<()> {
+    fn interpret_inner(&mut self) -> miette::Result<()> {
         loop {
             let op = unsafe { *ip!(self) };
-            debug!("{}", self.current_frame().disassemble_at_current_index(src));
+            debug!("{}", self.current_frame().disassemble_at_current_index());
             debug!("          {}", self.trace_stack());
             unsafe {
                 ip!(self) = ip!(self).add(1);
             }
             match op {
                 Op::Return => {
+                    let result = self.pop();
+                    let slots = self.current_frame().slots;
                     self.frame_count -= 1;
                     if self.frame_count == 0 {
                         self.pop();
                         return Ok(());
                     }
-                    todo!()
+                    self.stack_top = slots;
+                    self.push(result);
                 }
                 Op::Constant(index) => {
                     let constant = self.current_frame().chunk().constants[index as usize];
@@ -237,6 +249,10 @@ impl VM {
                 Op::Loop(offset) => unsafe {
                     ip!(self) = ip!(self).sub((offset + 1) as usize);
                 },
+                Op::Call(arg_count) => {
+                    let callee = self.peek(arg_count);
+                    self.call_value(callee, arg_count)?
+                }
             }
         }
     }
@@ -245,35 +261,55 @@ impl VM {
         unsafe { &mut *self.frames.add(self.frame_count - 1) }
     }
 
-    fn call_value(&mut self, callee: Value, arg_count: usize) -> miette::Result<()> {
-        unsafe {
-            if let Value::Obj(obj) = callee {
-                match obj.deref() {
-                    Obj::Function(function) => {
+    fn call_value(&mut self, callee: Value, arg_count: u8) -> miette::Result<()> {
+        if self.frame_count == FRAMES_MAX {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(
+                    self.current_frame().current_location(),
+                    "here"
+                )],
+                "Stack overflow",
+            )
+        }
+        if let Value::Obj(obj) = callee {
+            match obj.deref() {
+                Obj::Function(function) => {
+                    if function.arity() != arg_count {
+                        miette::bail!(
+                            labels = vec![LabeledSpan::at(
+                                self.current_frame().current_location(),
+                                "here"
+                            )],
+                            "Expected {} arguments but got {}",
+                            function.arity(),
+                            arg_count
+                        )
+                    }
+                    unsafe {
                         let frame = self.frames.add(self.frame_count);
                         (*frame).function = function;
                         (*frame).ip = function.chunk().code.ptr();
-                        (*frame).slots = self.stack_top.sub(arg_count + 1);
-                        self.frame_count += 1;
-                        Ok(())
+                        (*frame).slots = self.stack_top.sub(arg_count as usize + 1);
                     }
-                    _ => miette::bail!(
-                        labels = vec![LabeledSpan::at(
-                            self.current_frame().current_location(),
-                            "here"
-                        )],
-                        "Can only call functions or classes.",
-                    ),
+                    self.frame_count += 1;
+                    Ok(())
                 }
-            } else {
-                miette::bail!(
+                _ => miette::bail!(
                     labels = vec![LabeledSpan::at(
                         self.current_frame().current_location(),
                         "here"
                     )],
                     "Can only call functions or classes.",
-                )
+                ),
             }
+        } else {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(
+                    self.current_frame().current_location(),
+                    "here"
+                )],
+                "Can only call functions or classes.",
+            )
         }
     }
 
@@ -326,9 +362,9 @@ impl VM {
         }
     }
 
-    fn peek(&self, distance: usize) -> Value {
+    fn peek(&self, distance: u8) -> Value {
         // SAFETY: NOT SAFE, stack could overflow and underflow
-        unsafe { *self.stack_top.sub(1 + distance) }
+        unsafe { *self.stack_top.sub(1 + distance as usize) }
     }
 
     fn trace_stack(&self) -> String {
@@ -344,6 +380,24 @@ impl VM {
 
     fn reset_stack(&mut self) {
         self.stack_top = self.stack;
+    }
+
+    fn stacktrace(&self) -> String {
+        let mut trace = String::new();
+        for i in (0..(self.frame_count)).rev() {
+            unsafe {
+                let frame = self.frames.add(i);
+                let instruction = (*frame).ip.offset_from((*frame).chunk().code.ptr()) - 1;
+                let line = (*frame).chunk().line_number(instruction as usize);
+                let _ = write!(trace, "[line {}] in ", line);
+                if let Some(name) = (*(*frame).function).name() {
+                    let _ = writeln!(trace, "{}()", name.string);
+                } else {
+                    let _ = writeln!(trace, "script");
+                }
+            }
+        }
+        trace
     }
 }
 

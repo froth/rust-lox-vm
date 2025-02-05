@@ -1,5 +1,8 @@
 use miette::{NamedSource, SourceCode, SourceSpan};
-use std::fmt::{Error, Write as _};
+use std::{
+    fmt::{Error, Write as _},
+    sync::Arc,
+};
 
 use crate::{datastructures::vector::LoxVector, op::Op, types::value::Value};
 
@@ -8,14 +11,16 @@ pub struct Chunk {
     pub code: LoxVector<Op>,
     pub constants: LoxVector<Value>,
     pub locations: LoxVector<SourceSpan>,
+    pub source: Arc<NamedSource<String>>,
 }
 
 impl Chunk {
-    pub fn new() -> Self {
+    pub fn new(source: Arc<NamedSource<String>>) -> Self {
         Self {
             code: LoxVector::new(),
             constants: LoxVector::new(),
             locations: LoxVector::new(),
+            source,
         }
     }
 
@@ -31,15 +36,15 @@ impl Chunk {
             .expect("constant count overflows u8, not supported")
     }
 
-    pub fn disassemble<T: SourceCode>(&self, source: &NamedSource<T>) -> String {
+    pub fn disassemble(&self) -> String {
         let mut result = String::new();
-        let _ = writeln!(&mut result, "== {} ==", source.name());
+        let _ = writeln!(&mut result, "== {} ==", self.source.name());
         let iter = self.code.iter().zip(self.locations.iter()).enumerate();
         let mut last_line_number = None;
 
         for (offset, (op, span)) in iter {
             let (disassembled, line_number) = self
-                .to_disassembled(offset, op, span, source, last_line_number)
+                .to_disassembled(offset, op, span, last_line_number)
                 .expect("writing to String can't fail");
             let _ = writeln!(&mut result, "{disassembled}");
             last_line_number = Some(line_number);
@@ -47,41 +52,42 @@ impl Chunk {
         result
     }
 
-    pub fn disassemble_at<T: SourceCode>(&self, source: &NamedSource<T>, at: usize) -> String {
+    pub fn disassemble_at(&self, at: usize) -> String {
         let mut iter = self.code.iter().zip(self.locations.iter()).enumerate();
         if at == 0 {
             let (offset, (op, span)) = iter.next().expect("trying to disassemble empty chunk");
             let (disassembled, _) = self
-                .to_disassembled(offset, op, span, source, None)
+                .to_disassembled(offset, op, span, None)
                 .expect("writing to string can't fail");
             disassembled
         } else {
             let mut skiped_iter = iter.skip(at - 1);
             let (_, (_, span)) = skiped_iter.next().expect("disassembling unknown index");
-            let last_line_number = source.read_span(span, 0, 0).unwrap().line();
+            let last_line_number = self.source.read_span(span, 0, 0).unwrap().line();
             let (offset, (op, span)) = skiped_iter
                 .next()
                 .expect("trying to disassemble empty chunk");
             let (disassembled, _) = self
-                .to_disassembled(offset, op, span, source, Some(last_line_number))
+                .to_disassembled(offset, op, span, Some(last_line_number))
                 .expect("writing to string can't fail");
             disassembled
         }
     }
 
-    fn to_disassembled<T>(
+    pub fn line_number(&self, at: usize) -> usize {
+        let location = self.locations[at];
+        self.source.read_span(&location, 0, 0).unwrap().line() + 1
+    }
+
+    fn to_disassembled(
         &self,
         offset: usize,
         op: &Op,
         span: &SourceSpan,
-        source: &NamedSource<T>,
         last_line_number: Option<usize>,
-    ) -> Result<(String, usize), Error>
-    where
-        T: SourceCode,
-    {
+    ) -> Result<(String, usize), Error> {
         let mut result = String::new();
-        let line_number = source.read_span(span, 0, 0).unwrap().line();
+        let line_number = self.source.read_span(span, 0, 0).unwrap().line();
 
         write!(&mut result, "{offset:0>4} ")?;
 
@@ -97,8 +103,8 @@ impl Chunk {
                 let constant = self.constants[const_index];
                 write!(&mut result, "{:<16} {:<4} '{}'", op, const_index, constant)?;
             }
-            Op::GetLocal(slot) | Op::SetLocal(slot) => {
-                write!(&mut result, "{:<16} {:<4}", op, slot)?
+            Op::GetLocal(byte) | Op::SetLocal(byte) | Op::Call(byte) => {
+                write!(&mut result, "{:<16} {:<4}", op, byte)?
             }
             Op::JumpIfFalse(jump) | Op::Jump(jump) => write!(
                 &mut result,
@@ -127,7 +133,7 @@ mod tests {
 
     #[test]
     fn constant_index() {
-        let mut chunk: Chunk = Chunk::new();
+        let mut chunk: Chunk = Chunk::new(Arc::new(NamedSource::new("test", String::new())));
         let index = chunk.add_constant(Value::Number(12.1));
         assert_eq!(index, 0);
         let index = chunk.add_constant(Value::Number(12.1));
@@ -136,12 +142,12 @@ mod tests {
 
     #[test]
     fn disassemble_constant() {
-        let mut chunk = Chunk::new();
+        let src = "1.1".to_string();
+        let src = Arc::new(NamedSource::new("src", src));
+        let mut chunk = Chunk::new(src.into());
         let constant = chunk.add_constant(Value::Number(1.1));
-        let src = "1.1";
-        let src = NamedSource::new("src", src);
         chunk.write(Op::Constant(constant), SourceSpan::from((0, 3)));
-        let res = chunk.disassemble_at(&src, 0);
+        let res = chunk.disassemble_at(0);
         assert_eq!(res, "0000    1 CONSTANT         0    '1.1'");
     }
 }

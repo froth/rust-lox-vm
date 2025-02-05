@@ -6,7 +6,7 @@ pub enum InterpreterError {
     #[diagnostic(transparent)]
     #[error("Parser Error")]
     CompileError(Report),
-    #[diagnostic(transparent)]
+    #[diagnostic()]
     #[error("Oops vm blew up")]
-    RuntimeError(Report),
+    RuntimeError { error: Report, stacktrace: String },
 }

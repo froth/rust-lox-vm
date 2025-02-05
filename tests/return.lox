@@ -1,0 +1,13 @@
+interpret
+fun a(par) {
+    if (par) {
+        return 1;
+    }
+    return 2;
+}
+
+print a(true);
+print a(false);
+----
+1
+2

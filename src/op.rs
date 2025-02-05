@@ -27,4 +27,5 @@ pub enum Op {
     JumpIfFalse(u16), // TODO: read op_codes and parameters separately to decreace opcode size? As in clox
     Jump(u16),
     Loop(u16),
+    Call(u8),
 }
