@@ -1,12 +1,16 @@
+use std::mem::replace;
+
 use miette::{LabeledSpan, SourceSpan};
 
 use super::{Parser, Result};
 use crate::{
-    compiler::FunctionType,
+    check,
+    compiler::{Compiler, FunctionType},
     consume, match_token,
     op::Op,
     source_span_extensions::SourceSpanExtensions,
     token::{Token, TokenType},
+    types::{obj::Obj, value::Value},
 };
 
 impl Parser<'_, '_> {
@@ -67,7 +71,43 @@ impl Parser<'_, '_> {
     }
 
     fn function(&mut self, function_type: FunctionType) -> Result<()> {
-        todo!()
+        self.init_compiler(function_type);
+        self.current.begin_scope(); // has not to be ended because we drop the compiler in the end
+
+        let left_paren_location = consume!(
+            self,
+            TokenType::LeftParen,
+            "Expected '(' after function name"
+        );
+        if !check!(self.scanner, TokenType::RightParen) {
+            loop {
+                self.current.arity += 1;
+                if self.current.arity > 255 {
+                    miette::bail!(
+                        labels = vec![LabeledSpan::at(left_paren_location, "here")],
+                        "Can't have more than 255 parameters.",
+                    )
+                }
+                let constant = self.parse_variable()?;
+                self.current.define_variable(constant, left_paren_location);
+                if match_token!(self.scanner, TokenType::Comma)?.is_none() {
+                    break;
+                }
+            }
+        }
+        consume!(self, TokenType::RightParen, "Expected ')' after parameters");
+        consume!(
+            self,
+            TokenType::LeftBrace,
+            "Expected '{{' before function body"
+        );
+
+        let closing_location = self.block()?;
+        let function = self.end_compiler();
+        let obj_ref = self.gc.manage(Obj::Function(function));
+        self.current
+            .emit_constant(Value::Obj(obj_ref), closing_location);
+        Ok(())
     }
 
     fn statement(&mut self) -> Result<()> {

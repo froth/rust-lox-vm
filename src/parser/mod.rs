@@ -1,6 +1,8 @@
 mod expression;
 mod statement;
 
+use std::mem::replace;
+
 use miette::{ByteOffset, Diagnostic, LabeledSpan, NamedSource, Report, Result, SourceSpan};
 use tracing::debug;
 
@@ -10,7 +12,7 @@ use crate::{
     op::Op,
     scanner::Scanner,
     token::{Token, TokenType},
-    types::obj::Obj,
+    types::{function::Function, obj::Obj, string::LoxString},
 };
 
 pub struct Parser<'a, 'gc> {
@@ -28,6 +30,11 @@ pub struct ParseErrors {
     pub parser_errors: Vec<Report>,
 }
 
+pub struct Variable<'a> {
+    pub const_index: Option<u8>,
+    name: &'a str,
+}
+
 impl<'a, 'gc> Parser<'a, 'gc> {
     fn new(src: &'a NamedSource<String>, gc: &'gc mut Gc) -> Self {
         let eof = src.inner().len().saturating_sub(1);
@@ -37,7 +44,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             eof,
             gc,
             errors: vec![],
-            current: Compiler::new(FunctionType::Script),
+            current: Compiler::new(FunctionType::Script, None),
         }
     }
 
@@ -53,7 +60,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             .write(Op::Return, SourceSpan::new(parser.eof.into(), 1));
         debug!("\n{}", parser.current.chunk.disassemble(src));
         if parser.errors.is_empty() {
-            Ok(Obj::Function(parser.current.end_compiler()))
+            Ok(Obj::Function(parser.end_compiler()))
         } else {
             Err(ParseErrors {
                 parser_errors: parser.errors,
@@ -90,5 +97,26 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             }
             let _ = self.advance();
         }
+    }
+
+    fn init_compiler(&mut self, function_type: FunctionType) {
+        let name = if let FunctionType::Script = function_type {
+            None
+        } else {
+            Some(self.scanner.previous_lexeme())
+        };
+        let new_compiler = Compiler::new(function_type, name);
+        let old_compiler = replace(&mut self.current, new_compiler);
+        self.current.enclosing = Some(Box::new(old_compiler));
+    }
+
+    pub fn end_compiler(&mut self) -> Function {
+        let enclosing = self
+            .current
+            .enclosing
+            .take()
+            .unwrap_or(Box::new(Compiler::new(FunctionType::Script, None)));
+        let old = replace(&mut self.current, *enclosing);
+        Function::new(0, old.chunk, old.function_name.map(LoxString::string)) // TODO: Real names for real functions
     }
 }

@@ -17,7 +17,10 @@ pub enum FunctionType {
 }
 
 pub struct Compiler<'a> {
+    pub enclosing: Option<Box<Compiler<'a>>>,
     function_type: FunctionType,
+    pub function_name: Option<String>,
+    pub arity: usize,
     locals: Vec<Local<'a>>,
     scope_depth: u32,
     pub chunk: Chunk,
@@ -35,15 +38,18 @@ pub struct Jump {
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(function_type: FunctionType) -> Self {
+    pub fn new(function_type: FunctionType, function_name: Option<String>) -> Self {
         let slot_zero = Local {
             name: "",
             depth: Some(0),
         };
         Self {
+            enclosing: None,
+            function_type,
+            function_name,
+            arity: 0,
             locals: vec![slot_zero],
             scope_depth: 0,
-            function_type,
             chunk: Chunk::new(),
         }
     }
@@ -108,10 +114,6 @@ impl<'a> Compiler<'a> {
                 slot: position,
                 initialized: l.depth.is_some(),
             })
-    }
-
-    pub fn end_compiler(self) -> Function {
-        Function::new(0, self.chunk, None) // TODO: Real names for real functions
     }
 
     pub fn define_variable(&mut self, global_idx: Option<u8>, location: SourceSpan) {
@@ -187,7 +189,7 @@ mod tests {
 
     #[test]
     fn new_works() {
-        let compiler = Compiler::new(FunctionType::Script);
+        let compiler = Compiler::new(FunctionType::Script, None);
         assert_eq!(
             compiler.locals,
             vec![Local {
@@ -200,13 +202,15 @@ mod tests {
 
     #[test]
     fn has_variable_on_empty() {
-        let compiler = Compiler::new(FunctionType::Script);
+        let compiler = Compiler::new(FunctionType::Script, None);
         assert!(!compiler.has_variable_in_current_scope("asdasd"));
     }
 
     #[test]
     fn has_variable_on_upper_scope() {
         let compiler = Compiler {
+            enclosing: None,
+            arity: 0,
             locals: vec![
                 Local {
                     name: "a",
@@ -219,6 +223,7 @@ mod tests {
             ],
             scope_depth: 2,
             function_type: FunctionType::Script,
+            function_name: None,
             chunk: Chunk::new(),
         };
         assert!(!compiler.has_variable_in_current_scope("a"));
@@ -227,6 +232,8 @@ mod tests {
     #[test]
     fn has_variable_on_current_scope() {
         let compiler = Compiler {
+            enclosing: None,
+            arity: 0,
             locals: vec![
                 Local {
                     name: "a",
@@ -239,6 +246,7 @@ mod tests {
             ],
             scope_depth: 2,
             function_type: FunctionType::Script,
+            function_name: None,
             chunk: Chunk::new(),
         };
         assert!(compiler.has_variable_in_current_scope("a"));
@@ -247,6 +255,8 @@ mod tests {
     #[test]
     fn has_variable_on_current_scope_with_uninitialized_behind() {
         let compiler = Compiler {
+            enclosing: None,
+            arity: 0,
             locals: vec![
                 Local {
                     name: "a",
@@ -263,6 +273,7 @@ mod tests {
             ],
             scope_depth: 2,
             function_type: FunctionType::Script,
+            function_name: None,
             chunk: Chunk::new(),
         };
         assert!(compiler.has_variable_in_current_scope("b"));
@@ -272,6 +283,8 @@ mod tests {
     fn end_scope_writes_enough_pops() {
         let location = SourceSpan::from((0, 0));
         let mut compiler = Compiler {
+            enclosing: None,
+            arity: 0,
             locals: vec![
                 Local {
                     name: "a",
@@ -288,6 +301,7 @@ mod tests {
             ],
             scope_depth: 2,
             function_type: FunctionType::Script,
+            function_name: None,
             chunk: Chunk::new(),
         };
         compiler.end_scope(location);
@@ -299,6 +313,8 @@ mod tests {
     #[test]
     fn resolve_local_uninitialized() {
         let compiler = Compiler {
+            enclosing: None,
+            arity: 0,
             locals: vec![
                 Local {
                     name: "a",
@@ -315,6 +331,7 @@ mod tests {
             ],
             scope_depth: 2,
             function_type: FunctionType::Script,
+            function_name: None,
             chunk: Chunk::new(),
         };
         assert_eq!(
@@ -329,6 +346,8 @@ mod tests {
     #[test]
     fn resolve_local_initialized() {
         let compiler = Compiler {
+            enclosing: None,
+            arity: 0,
             locals: vec![
                 Local {
                     name: "a",
@@ -345,6 +364,7 @@ mod tests {
             ],
             scope_depth: 2,
             function_type: FunctionType::Script,
+            function_name: None,
             chunk: Chunk::new(),
         };
         assert_eq!(
