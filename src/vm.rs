@@ -88,7 +88,7 @@ impl VM {
             unsafe { alloc::alloc(Layout::array::<Value>(FRAMES_MAX).unwrap()) as *mut CallFrame };
         let gc = Gc::new();
         let globals = HashTable::new();
-        Self {
+        let mut vm = Self {
             stack,
             stack_top: stack,
             frames,
@@ -97,7 +97,15 @@ impl VM {
             globals,
             printer: Box::new(ConsolePrinter),
             sources: vec![],
-        }
+        };
+        vm.define_native("clock", |_, _| {
+            let millis = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs_f64();
+            Value::Number(millis)
+        });
+        vm
     }
 
     pub fn interpret(
@@ -294,6 +302,12 @@ impl VM {
                     self.frame_count += 1;
                     Ok(())
                 }
+                Obj::Native(function) => unsafe {
+                    let result = function(arg_count, self.stack_top.sub(arg_count as usize));
+                    self.stack_top = self.stack_top.sub(arg_count as usize + 1);
+                    self.push(result);
+                    Ok(())
+                },
                 _ => miette::bail!(
                     labels = vec![LabeledSpan::at(
                         self.current_frame().current_location(),
@@ -398,6 +412,16 @@ impl VM {
             }
         }
         trace
+    }
+
+    fn define_native(&mut self, name: &str, function: fn(u8, *mut Value) -> Value) {
+        let name = self.gc.manage_str(name);
+        self.push(Value::Obj(name));
+        let function = self.gc.manage(Obj::Native(function));
+        self.push(Value::Obj(function));
+        self.globals.insert(self.peek(1), self.peek(0));
+        self.pop();
+        self.pop();
     }
 }
 
