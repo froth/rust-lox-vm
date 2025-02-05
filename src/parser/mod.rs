@@ -1,7 +1,7 @@
 mod expression;
 mod statement;
 
-use std::mem::replace;
+use std::{mem::replace, sync::Arc};
 
 use miette::{ByteOffset, Diagnostic, LabeledSpan, NamedSource, Report, Result, SourceSpan};
 use tracing::debug;
@@ -21,6 +21,7 @@ pub struct Parser<'a, 'gc> {
     gc: &'gc mut Gc,
     errors: Vec<Report>,
     current: Compiler<'a>,
+    src: Arc<NamedSource<String>>,
 }
 
 #[derive(thiserror::Error, Debug, Diagnostic)]
@@ -39,7 +40,8 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             eof,
             gc,
             errors: vec![],
-            current: Compiler::new(FunctionType::Script, None),
+            current: Compiler::new(FunctionType::Script, None, Arc::new(src.clone())),
+            src: Arc::new(src.clone()),
         }
     }
 
@@ -50,7 +52,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             parser.declaration();
         }
 
-        debug!("\n{}", parser.current.chunk.disassemble(src));
+        debug!("\n{}", parser.current.chunk.disassemble());
         if parser.errors.is_empty() {
             Ok(Obj::Function(
                 parser.end_compiler(SourceSpan::new(parser.eof.into(), 1)),
@@ -99,7 +101,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         } else {
             Some(self.scanner.previous_lexeme())
         };
-        let new_compiler = Compiler::new(function_type, name);
+        let new_compiler = Compiler::new(function_type, name, self.src.clone());
         let old_compiler = replace(&mut self.current, new_compiler);
         self.current.enclosing = Some(Box::new(old_compiler));
     }
@@ -107,12 +109,17 @@ impl<'a, 'gc> Parser<'a, 'gc> {
     pub fn end_compiler(&mut self, location: SourceSpan) -> Function {
         self.current.chunk.write(Op::Nil, location);
         self.current.chunk.write(Op::Return, location);
+        let arity = self.current.arity;
         let enclosing = self
             .current
             .enclosing
             .take()
-            .unwrap_or(Box::new(Compiler::new(FunctionType::Script, None)));
+            .unwrap_or(Box::new(Compiler::new(
+                FunctionType::Script,
+                None,
+                self.src.clone(),
+            )));
         let old = replace(&mut self.current, *enclosing);
-        Function::new(0, old.chunk, old.function_name.map(LoxString::string))
+        Function::new(arity, old.chunk, old.function_name.map(LoxString::string))
     }
 }

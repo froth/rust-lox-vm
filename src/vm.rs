@@ -29,6 +29,7 @@ pub struct VM {
     gc: Gc,
     globals: HashTable,
     printer: Box<dyn Printer>,
+    sources: Vec<NamedSource<String>>,
 }
 
 struct CallFrame {
@@ -49,9 +50,9 @@ impl CallFrame {
         self.chunk().locations[self.current_index()]
     }
 
-    fn disassemble_at_current_index(&mut self, src: &NamedSource<String>) -> String {
+    fn disassemble_at_current_index(&mut self) -> String {
         let current_index = self.current_index();
-        self.chunk().disassemble_at(src, current_index)
+        self.chunk().disassemble_at(current_index)
     }
 }
 
@@ -95,6 +96,7 @@ impl VM {
             gc,
             globals,
             printer: Box::new(ConsolePrinter),
+            sources: vec![],
         }
     }
 
@@ -113,19 +115,23 @@ impl VM {
         self.call_value(self.peek(arg_count), 0)
             .map_err(|e| InterpreterError::RuntimeError(e.with_source_code(src.clone())))?;
 
-        match self.interpret_inner(&src) {
+        self.sources.push(src);
+
+        match self.interpret_inner() {
             Ok(value) => Ok(value),
             Err(e) => {
                 self.reset_stack();
-                Err(InterpreterError::RuntimeError(e.with_source_code(src)))
+                Err(InterpreterError::RuntimeError(e.with_source_code(
+                    self.current_frame().chunk().source.clone(),
+                )))
             }
         }
     }
 
-    fn interpret_inner(&mut self, src: &NamedSource<String>) -> miette::Result<()> {
+    fn interpret_inner(&mut self) -> miette::Result<()> {
         loop {
             let op = unsafe { *ip!(self) };
-            debug!("{}", self.current_frame().disassemble_at_current_index(src));
+            debug!("{}", self.current_frame().disassemble_at_current_index());
             debug!("          {}", self.trace_stack());
             unsafe {
                 ip!(self) = ip!(self).add(1);

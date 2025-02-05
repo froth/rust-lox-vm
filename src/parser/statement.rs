@@ -79,13 +79,14 @@ impl Parser<'_, '_> {
         );
         if !check!(self.scanner, TokenType::RightParen) {
             loop {
-                self.current.arity += 1;
-                if self.current.arity > 255 {
+                self.current.arity = if let Some(arity) = self.current.arity.checked_add(1) {
+                    arity
+                } else {
                     miette::bail!(
                         labels = vec![LabeledSpan::at(left_paren_location, "here")],
                         "Can't have more than 255 parameters.",
                     )
-                }
+                };
                 let constant = self.parse_variable()?;
                 self.current.define_variable(constant, left_paren_location);
                 if match_token!(self.scanner, TokenType::Comma)?.is_none() {
