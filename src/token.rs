@@ -17,7 +17,7 @@ pub enum TokenType<'a> {
     RightParen,
     #[strum(serialize = "{")]
     LeftBrace,
-    #[strum(serialize = "}")]
+    #[strum(serialize = "}}")]
     RightBrace,
     #[strum(serialize = ",")]
     Comma,

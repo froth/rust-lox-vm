@@ -7,15 +7,15 @@ authors = ["Fred Roth"]
 description = "An interpreter for the Lox language (http://craftinginterpreters.com/)"
 
 [dependencies]
-clap = { version = "4.5.9", features = ["derive", "env", "string"] }
-miette = { version = "7.2.0", features = ["fancy"] }
-thiserror = "1.0.64"
-tracing = { version = "0.1.40", features = ["max_level_debug", "release_max_level_info"]}
-tracing-subscriber = "0.3.18"
-directories = "5.0.1"
-rustyline = {version= "14.0.0", features = ["with-file-history", "derive"]}
-strum = { version = "0.25", features = ["derive"] }
+clap = { version = "4.5.28", features = ["derive", "env", "string"] }
+miette = { version = "7.5.0", features = ["fancy"] }
+thiserror = "2.0.11"
+tracing = { version = "0.1.41", features = ["max_level_debug", "release_max_level_info"]}
+tracing-subscriber = "0.3.19"
+directories = "6.0.0"
+rustyline = {version= "15.0.0", features = ["with-file-history", "derive"]}
+strum = { version = "0.26", features = ["derive"] }
 [dev-dependencies]
 assert_matches = "1.5"
 datadriven = "0.8.0"
-serde_json = "1.0.133"
+serde_json = "1.0.138"
