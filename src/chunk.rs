@@ -120,6 +120,11 @@ impl Chunk {
                 offset,
                 offset - (*jump as usize)
             )?,
+            Op::Closure(idx) => {
+                let const_index: usize = (*idx).into();
+                let constant = self.constants[const_index];
+                write!(&mut result, "{:<16} {:<4} '{}'", op, const_index, constant)?;
+            }
             op => write!(&mut result, "{op}")?,
         }
         Ok((result, line_number))

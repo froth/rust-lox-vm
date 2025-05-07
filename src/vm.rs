@@ -15,7 +15,7 @@ use crate::{
     op::Op,
     parser::Parser,
     printer::{ConsolePrinter, Printer},
-    types::{function::Function, obj::Obj, value::Value},
+    types::{function::Function, obj::Obj, obj_ref::ObjRef, value::Value},
 };
 
 const FRAMES_MAX: usize = 64;
@@ -33,17 +33,26 @@ pub struct VM {
 }
 
 struct CallFrame {
-    function: *const Function,
+    closure: ObjRef,
     ip: *const Op,
     slots: *mut Value,
 }
 
 impl CallFrame {
+    fn function(&self) -> &Function {
+        if let Obj::Closure { function } = self.closure.deref() {
+            if let Obj::Function(function) = function.deref() {
+                return function;
+            }
+        }
+        unreachable!("callframe stored non-closure")
+    }
+
     fn chunk(&self) -> &Chunk {
-        unsafe { (*self.function).chunk() }
+        self.function().chunk()
     }
     fn current_index(&self) -> usize {
-        unsafe { self.ip.offset_from(&(*self.function).chunk().code[0]) as usize }
+        unsafe { self.ip.offset_from(&(*self.function()).chunk().code[0]) as usize }
     }
 
     fn current_location(&self) -> SourceSpan {
@@ -119,6 +128,10 @@ impl VM {
 
         let function = self.gc.manage(function);
         self.push(Value::Obj(function));
+        let closure = self.gc.manage(Obj::Closure { function });
+        self.pop();
+        self.push(Value::Obj(closure));
+
         let arg_count = 0;
         self.call_value(self.peek(arg_count), 0)
             .map_err(|e| InterpreterError::RuntimeError {
@@ -261,6 +274,16 @@ impl VM {
                     let callee = self.peek(arg_count);
                     self.call_value(callee, arg_count)?
                 }
+                Op::Closure(index) => {
+                    let function = self.current_frame().chunk().constants[index as usize];
+                    if let Value::Obj(obj) = function {
+                        let closure = Obj::Closure { function: obj };
+                        let closure = Value::Obj(self.gc.manage(closure));
+                        self.push(closure);
+                    } else {
+                        unreachable!("expected function at closure index but was {:?}", function);
+                    }
+                }
             }
         }
     }
@@ -281,26 +304,30 @@ impl VM {
         }
         if let Value::Obj(obj) = callee {
             match obj.deref() {
-                Obj::Function(function) => {
-                    if function.arity() != arg_count {
-                        miette::bail!(
-                            labels = vec![LabeledSpan::at(
-                                self.current_frame().current_location(),
-                                "here"
-                            )],
-                            "Expected {} arguments but got {}",
-                            function.arity(),
-                            arg_count
-                        )
+                Obj::Closure { function } => {
+                    if let Obj::Function(function) = function.deref() {
+                        if function.arity() != arg_count {
+                            miette::bail!(
+                                labels = vec![LabeledSpan::at(
+                                    self.current_frame().current_location(),
+                                    "here"
+                                )],
+                                "Expected {} arguments but got {}",
+                                function.arity(),
+                                arg_count
+                            )
+                        }
+                        unsafe {
+                            let frame = self.frames.add(self.frame_count);
+                            (*frame).closure = obj;
+                            (*frame).ip = function.chunk().code.ptr();
+                            (*frame).slots = self.stack_top.sub(arg_count as usize + 1);
+                        }
+                        self.frame_count += 1;
+                        Ok(())
+                    } else {
+                        unreachable!("non function wrapped in closure")
                     }
-                    unsafe {
-                        let frame = self.frames.add(self.frame_count);
-                        (*frame).function = function;
-                        (*frame).ip = function.chunk().code.ptr();
-                        (*frame).slots = self.stack_top.sub(arg_count as usize + 1);
-                    }
-                    self.frame_count += 1;
-                    Ok(())
                 }
                 Obj::Native(function) => unsafe {
                     let result = function(arg_count, self.stack_top.sub(arg_count as usize));
@@ -313,7 +340,7 @@ impl VM {
                         self.current_frame().current_location(),
                         "here"
                     )],
-                    "Can only call functions or classes.",
+                    "Can only call closures or classes.",
                 ),
             }
         } else {
@@ -404,7 +431,7 @@ impl VM {
                 let instruction = (*frame).ip.offset_from((*frame).chunk().code.ptr()) - 1;
                 let line = (*frame).chunk().line_number(instruction as usize);
                 let _ = write!(trace, "[line {}] in ", line);
-                if let Some(name) = (*(*frame).function).name() {
+                if let Some(name) = (*(*frame).function()).name() {
                     let _ = writeln!(trace, "{}()", name.string);
                 } else {
                     let _ = writeln!(trace, "script");
