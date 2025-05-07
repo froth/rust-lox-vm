@@ -1,4 +1,5 @@
 use miette::{LabeledSpan, SourceSpan};
+use tracing::instrument::WithSubscriber;
 
 use super::{Parser, Result};
 use crate::{
@@ -104,8 +105,8 @@ impl Parser<'_, '_> {
         let closing_location = self.block()?;
         let function = self.end_compiler(closing_location);
         let obj_ref = self.gc.manage(Obj::Function(function));
-        self.current
-            .emit_constant(Value::Obj(obj_ref), closing_location);
+        let idx = self.current.chunk.add_constant(Value::Obj(obj_ref));
+        self.current.chunk.write(Op::Closure(idx), closing_location);
         Ok(())
     }
 

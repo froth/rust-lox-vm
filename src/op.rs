@@ -28,4 +28,5 @@ pub enum Op {
     Jump(u16),
     Loop(u16),
     Call(u8),
+    Closure(u8),
 }
