@@ -11,7 +11,11 @@ pub enum Obj {
     String(LoxString),
     Function(Function),
     Native(fn(u8, *mut Value) -> Value),
-    Closure { function: ObjRef },
+    Closure {
+        function: ObjRef,
+        upvalues: Vec<ObjRef>,
+    },
+    Upvalue(*mut Value),
 }
 
 impl Hashable for Obj {
@@ -20,7 +24,11 @@ impl Hashable for Obj {
             Obj::String(lox_string) => lox_string.hash(),
             Obj::Function(function) => function.hash(),
             Obj::Native(_) => Hash(11),
-            Obj::Closure { function } => function.hash(),
+            Obj::Closure {
+                function,
+                upvalues: _,
+            } => function.hash(),
+            Obj::Upvalue(value) => unsafe { (**value).hash() },
         }
     }
 }
@@ -31,7 +39,11 @@ impl Display for Obj {
             Obj::String(s) => write!(f, "{}", s.string),
             Obj::Function(function) => write!(f, "{}", function),
             Obj::Native(_) => write!(f, "<native fn>"),
-            Obj::Closure { function } => write!(f, "{}", function),
+            Obj::Closure {
+                function,
+                upvalues: _,
+            } => write!(f, "closure over {}", function),
+            Obj::Upvalue(_) => write!(f, "upvalue"),
         }
     }
 }

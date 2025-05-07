@@ -2,6 +2,7 @@ pub mod function;
 pub mod obj;
 pub mod obj_ref;
 pub mod string;
+pub mod upvalue;
 pub mod value;
 
 #[derive(Debug, Copy, Clone, PartialEq)]

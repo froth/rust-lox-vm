@@ -1,5 +1,4 @@
 use miette::{LabeledSpan, SourceSpan};
-use tracing::instrument::WithSubscriber;
 
 use super::{Parser, Result};
 use crate::{

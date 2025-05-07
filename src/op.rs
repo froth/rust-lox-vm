@@ -24,6 +24,8 @@ pub enum Op {
     SetGlobal(u8),
     GetLocal(u8),
     SetLocal(u8),
+    GetUpvalue(u8),
+    SetUpvalue(u8),
     JumpIfFalse(u16), // TODO: read op_codes and parameters separately to decreace opcode size? As in clox
     Jump(u16),
     Loop(u16),
