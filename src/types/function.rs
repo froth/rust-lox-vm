@@ -2,17 +2,28 @@ use std::fmt::Display;
 
 use crate::chunk::Chunk;
 
-use super::{string::LoxString, Hash, Hashable};
+use super::{string::LoxString, upvalue::UpvalueIndex, Hash, Hashable};
 
 pub struct Function {
     arity: u8,
     chunk: Chunk,
     name: Option<LoxString>,
+    upvalues: Vec<UpvalueIndex>,
 }
 
 impl Function {
-    pub fn new(arity: u8, chunk: Chunk, name: Option<LoxString>) -> Self {
-        Self { arity, chunk, name }
+    pub fn new(
+        arity: u8,
+        chunk: Chunk,
+        name: Option<LoxString>,
+        upvalues: Vec<UpvalueIndex>,
+    ) -> Self {
+        Self {
+            arity,
+            chunk,
+            name,
+            upvalues,
+        }
     }
 
     pub fn arity(&self) -> u8 {
@@ -25,6 +36,10 @@ impl Function {
 
     pub fn name(&self) -> Option<&LoxString> {
         self.name.as_ref()
+    }
+
+    pub fn upvalues(&self) -> &[UpvalueIndex] {
+        &self.upvalues
     }
 }
 

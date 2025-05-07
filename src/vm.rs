@@ -40,12 +40,28 @@ struct CallFrame {
 
 impl CallFrame {
     fn function(&self) -> &Function {
-        if let Obj::Closure { function } = self.closure.deref() {
+        if let Obj::Closure {
+            function,
+            upvalues: _,
+        } = self.closure.deref()
+        {
             if let Obj::Function(function) = function.deref() {
                 return function;
             }
         }
         unreachable!("callframe stored non-closure")
+    }
+
+    fn upvalues(&self) -> &[ObjRef] {
+        if let Obj::Closure {
+            function: _,
+            upvalues,
+        } = self.closure.deref()
+        {
+            upvalues
+        } else {
+            unreachable!("callframe stored non-closure")
+        }
     }
 
     fn chunk(&self) -> &Chunk {
@@ -128,7 +144,10 @@ impl VM {
 
         let function = self.gc.manage(function);
         self.push(Value::Obj(function));
-        let closure = self.gc.manage(Obj::Closure { function });
+        let closure = self.gc.manage(Obj::Closure {
+            function,
+            upvalues: vec![],
+        });
         self.pop();
         self.push(Value::Obj(closure));
 
@@ -259,6 +278,22 @@ impl VM {
                     let slots = self.current_frame().slots;
                     *(slots.add(slot as usize)) = self.peek(0)
                 },
+                Op::GetUpvalue(index) => unsafe {
+                    let upvalue = self.current_frame().upvalues()[index as usize];
+                    if let Obj::Upvalue(location) = upvalue.deref() {
+                        self.push(**location);
+                    } else {
+                        unreachable!()
+                    }
+                },
+                Op::SetUpvalue(index) => unsafe {
+                    let upvalue = self.current_frame().upvalues()[index as usize];
+                    if let Obj::Upvalue(location) = upvalue.deref() {
+                        **location = self.peek(0)
+                    } else {
+                        unreachable!()
+                    }
+                },
                 Op::JumpIfFalse(offset) => {
                     if self.peek(0).is_falsey() {
                         unsafe { ip!(self) = ip!(self).add((offset - 1) as usize) }
@@ -277,15 +312,44 @@ impl VM {
                 Op::Closure(index) => {
                     let function = self.current_frame().chunk().constants[index as usize];
                     if let Value::Obj(obj) = function {
-                        let closure = Obj::Closure { function: obj };
-                        let closure = Value::Obj(self.gc.manage(closure));
-                        self.push(closure);
+                        if let Obj::Function(f) = obj.deref() {
+                            let upvalues = f
+                                .upvalues()
+                                .iter()
+                                .map(|u| {
+                                    if u.is_local() {
+                                        let value = unsafe {
+                                            self.current_frame().slots.add(index as usize)
+                                        };
+                                        self.capture_upvalue(value)
+                                    } else {
+                                        self.current_frame().upvalues()[index as usize]
+                                    }
+                                })
+                                .collect();
+                            let closure = Obj::Closure {
+                                function: obj,
+                                upvalues,
+                            };
+                            let closure = self.gc.manage(closure);
+                            self.push(Value::Obj(closure));
+                        } else {
+                            unreachable!(
+                                "expected function at closure index but was {:?}",
+                                function
+                            );
+                        }
                     } else {
                         unreachable!("expected function at closure index but was {:?}", function);
                     }
                 }
             }
         }
+    }
+
+    fn capture_upvalue(&mut self, local: *mut Value) -> ObjRef {
+        let upvalue = Obj::Upvalue(local);
+        self.gc.manage(upvalue)
     }
 
     fn current_frame(&mut self) -> &mut CallFrame {
@@ -304,7 +368,10 @@ impl VM {
         }
         if let Value::Obj(obj) = callee {
             match obj.deref() {
-                Obj::Closure { function } => {
+                Obj::Closure {
+                    function,
+                    upvalues: _,
+                } => {
                     if let Obj::Function(function) = function.deref() {
                         if function.arity() != arg_count {
                             miette::bail!(

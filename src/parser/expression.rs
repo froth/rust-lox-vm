@@ -63,8 +63,10 @@ impl Parser<'_, '_> {
                     "Can't read local variable in its own initializer",
                 )
             }
-            let slot = resolved.slot as u8;
+            let slot = resolved.slot;
             (Op::GetLocal(slot), Op::SetLocal(slot))
+        } else if let Some(upvalue_index) = self.current.resolve_upvalue(name) {
+            (Op::GetUpvalue(upvalue_index), Op::SetUpvalue(upvalue_index))
         } else {
             let arg = self.current.identifier_constant(self.gc.manage_str(name));
             (Op::GetGlobal(arg), Op::SetGlobal(arg))

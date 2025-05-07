@@ -120,6 +120,11 @@ impl<'a, 'gc> Parser<'a, 'gc> {
                 self.src.clone(),
             )));
         let old = replace(&mut self.current, *enclosing);
-        Function::new(arity, old.chunk, old.function_name.map(LoxString::string))
+        Function::new(
+            arity,
+            old.chunk,
+            old.function_name.map(LoxString::string),
+            old.upvalues,
+        )
     }
 }

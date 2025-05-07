@@ -1,10 +1,15 @@
 use miette::{NamedSource, SourceCode, SourceSpan};
 use std::{
     fmt::{Error, Write as _},
+    ops::Deref,
     sync::Arc,
 };
 
-use crate::{datastructures::vector::LoxVector, op::Op, types::value::Value};
+use crate::{
+    datastructures::vector::LoxVector,
+    op::Op,
+    types::{obj::Obj, value::Value},
+};
 
 pub struct Chunk {
     // in original clox this is Vector<u8> this is more wasteful but way easier. Maybe benchmark in the future?
@@ -103,9 +108,11 @@ impl Chunk {
                 let constant = self.constants[const_index];
                 write!(&mut result, "{:<16} {:<4} '{}'", op, const_index, constant)?;
             }
-            Op::GetLocal(byte) | Op::SetLocal(byte) | Op::Call(byte) => {
-                write!(&mut result, "{:<16} {:<4}", op, byte)?
-            }
+            Op::GetLocal(byte)
+            | Op::SetLocal(byte)
+            | Op::GetUpvalue(byte)
+            | Op::SetUpvalue(byte)
+            | Op::Call(byte) => write!(&mut result, "{:<16} {:<4}", op, byte)?,
             Op::JumpIfFalse(jump) | Op::Jump(jump) => write!(
                 &mut result,
                 "{:<16} {:0>4} -> {:0>4}",
@@ -124,6 +131,19 @@ impl Chunk {
                 let const_index: usize = (*idx).into();
                 let constant = self.constants[const_index];
                 write!(&mut result, "{:<16} {:<4} '{}'", op, const_index, constant)?;
+                if let Value::Obj(obj) = constant {
+                    if let Obj::Function(function) = obj.deref() {
+                        function.upvalues().iter().for_each(|u| {
+                            write!(
+                                &mut result,
+                                "\n{} '{}'",
+                                if u.is_local() { "local" } else { "upvalue" },
+                                u.index()
+                            )
+                            .unwrap()
+                        });
+                    }
+                }
             }
             op => write!(&mut result, "{op}")?,
         }

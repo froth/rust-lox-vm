@@ -5,7 +5,7 @@ use miette::{LabeledSpan, NamedSource, Result, SourceSpan};
 use crate::{
     chunk::Chunk,
     op::Op,
-    types::{obj_ref::ObjRef, value::Value},
+    types::{obj_ref::ObjRef, upvalue::UpvalueIndex, value::Value},
 };
 #[derive(PartialEq, Debug)]
 struct Local<'a> {
@@ -25,13 +25,14 @@ pub struct Compiler<'a> {
     pub function_name: Option<String>,
     pub arity: u8,
     locals: Vec<Local<'a>>,
+    pub upvalues: Vec<UpvalueIndex>,
     scope_depth: u32,
     pub chunk: Chunk,
 }
 
 #[derive(PartialEq, Debug)]
 pub struct ResolveResult {
-    pub slot: usize,
+    pub slot: u8,
     pub initialized: bool,
 }
 pub struct Jump {
@@ -56,6 +57,7 @@ impl<'a> Compiler<'a> {
             function_name,
             arity: 0,
             locals: vec![slot_zero],
+            upvalues: vec![],
             scope_depth: 0,
             chunk: Chunk::new(src),
         }
@@ -118,9 +120,31 @@ impl<'a> Compiler<'a> {
             .rev()
             .find(|(_, l)| l.name == name)
             .map(|(position, l)| ResolveResult {
-                slot: position,
+                slot: position as u8,
                 initialized: l.depth.is_some(),
             })
+    }
+
+    pub fn resolve_upvalue(&mut self, name: &str) -> Option<u8> {
+        if let Some(enclosing) = self.enclosing.as_mut() {
+            if let Some(local) = enclosing.resolve_locale(name) {
+                return Some(self.add_upvalue(local.slot, true));
+            } else if let Some(non_local) = enclosing.resolve_upvalue(name) {
+                return Some(self.add_upvalue(non_local, false));
+            }
+        }
+        None
+    }
+
+    fn add_upvalue(&mut self, index: u8, is_local: bool) -> u8 {
+        let upvalue = UpvalueIndex::new(index, is_local);
+        if let Some(i) = self.upvalues.iter().position(|u| u == &upvalue) {
+            i as u8
+        } else {
+            assert!(self.upvalues.len() <= u8::MAX as usize, "too many upvalues");
+            self.upvalues.push(UpvalueIndex::new(index, is_local));
+            (self.upvalues.len() - 1) as u8
+        }
     }
 
     pub fn define_variable(&mut self, global_idx: Option<u8>, location: SourceSpan) {
@@ -192,6 +216,8 @@ impl<'a> Compiler<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use super::*;
 
     fn empty_src() -> Arc<NamedSource<String>> {
@@ -231,6 +257,7 @@ mod tests {
                     depth: Some(2),
                 },
             ],
+            upvalues: vec![],
             scope_depth: 2,
             function_type: FunctionType::Script,
             function_name: None,
@@ -254,6 +281,7 @@ mod tests {
                     depth: Some(2),
                 },
             ],
+            upvalues: vec![],
             scope_depth: 2,
             function_type: FunctionType::Script,
             function_name: None,
@@ -281,6 +309,7 @@ mod tests {
                     depth: None,
                 },
             ],
+            upvalues: vec![],
             scope_depth: 2,
             function_type: FunctionType::Script,
             function_name: None,
@@ -309,6 +338,7 @@ mod tests {
                     depth: None,
                 },
             ],
+            upvalues: vec![],
             scope_depth: 2,
             function_type: FunctionType::Script,
             function_name: None,
@@ -339,6 +369,7 @@ mod tests {
                     depth: None,
                 },
             ],
+            upvalues: vec![],
             scope_depth: 2,
             function_type: FunctionType::Script,
             function_name: None,
@@ -372,6 +403,7 @@ mod tests {
                     depth: None,
                 },
             ],
+            upvalues: vec![],
             scope_depth: 2,
             function_type: FunctionType::Script,
             function_name: None,
@@ -383,6 +415,18 @@ mod tests {
                 slot: 1,
                 initialized: true
             })
+        );
+    }
+
+    #[test]
+    fn add_upvalue_deduplicates() {
+        let mut compiler = Compiler::new(FunctionType::Function, None, empty_src());
+        compiler.add_upvalue(4, true);
+        compiler.add_upvalue(2, false);
+        compiler.add_upvalue(4, true);
+        assert_eq!(
+            compiler.upvalues,
+            vec![UpvalueIndex::new(4, true), UpvalueIndex::new(2, false)]
         );
     }
 }
