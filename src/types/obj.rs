@@ -15,7 +15,11 @@ pub enum Obj {
         function: ObjRef,
         upvalues: Vec<ObjRef>,
     },
-    Upvalue(*mut Value),
+    Upvalue {
+        location: *mut Value,
+        next: Option<ObjRef>,
+        closed: Value,
+    },
 }
 
 impl Hashable for Obj {
@@ -28,7 +32,9 @@ impl Hashable for Obj {
                 function,
                 upvalues: _,
             } => function.hash(),
-            Obj::Upvalue(value) => unsafe { (**value).hash() },
+            Obj::Upvalue {
+                location: value, ..
+            } => unsafe { (**value).hash() },
         }
     }
 }
@@ -43,7 +49,7 @@ impl Display for Obj {
                 function,
                 upvalues: _,
             } => write!(f, "closure over {}", function),
-            Obj::Upvalue(_) => write!(f, "upvalue"),
+            Obj::Upvalue { location: _, .. } => write!(f, "upvalue"),
         }
     }
 }

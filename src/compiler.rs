@@ -11,6 +11,7 @@ use crate::{
 struct Local<'a> {
     name: &'a str,
     depth: Option<u32>,
+    is_captured: bool,
 }
 
 #[derive(PartialEq, Debug)]
@@ -50,6 +51,7 @@ impl<'a> Compiler<'a> {
         let slot_zero = Local {
             name: "",
             depth: Some(0),
+            is_captured: false,
         };
         Self {
             enclosing: None,
@@ -76,8 +78,12 @@ impl<'a> Compiler<'a> {
 
         while let Some(last) = self.locals.last() {
             if last.depth.is_none_or(|s| s > self.scope_depth) {
+                if last.is_captured {
+                    self.chunk.write(Op::CloseUpvalue, location);
+                } else {
+                    self.chunk.write(Op::Pop, location);
+                }
                 self.locals.pop();
-                self.chunk.write(Op::Pop, location);
             } else {
                 break;
             }
@@ -91,7 +97,11 @@ impl<'a> Compiler<'a> {
                 "Too many local variables in function.",
             )
         }
-        let local = Local { name, depth: None };
+        let local = Local {
+            name,
+            depth: None,
+            is_captured: false,
+        };
         self.locals.push(local);
         Ok(())
     }
@@ -113,7 +123,7 @@ impl<'a> Compiler<'a> {
             .any(|l| l.name == name)
     }
 
-    pub fn resolve_locale(&self, name: &str) -> Option<ResolveResult> {
+    pub fn resolve_local(&self, name: &str) -> Option<ResolveResult> {
         self.locals
             .iter()
             .enumerate()
@@ -127,7 +137,8 @@ impl<'a> Compiler<'a> {
 
     pub fn resolve_upvalue(&mut self, name: &str) -> Option<u8> {
         if let Some(enclosing) = self.enclosing.as_mut() {
-            if let Some(local) = enclosing.resolve_locale(name) {
+            if let Some(local) = enclosing.resolve_local(name) {
+                enclosing.locals[local.slot as usize].is_captured = true;
                 return Some(self.add_upvalue(local.slot, true));
             } else if let Some(non_local) = enclosing.resolve_upvalue(name) {
                 return Some(self.add_upvalue(non_local, false));
@@ -230,7 +241,8 @@ mod tests {
             compiler.locals,
             vec![Local {
                 name: "",
-                depth: Some(0)
+                depth: Some(0),
+                is_captured: false
             }]
         ); // slot zero
         assert_eq!(compiler.scope_depth, 0);
@@ -251,10 +263,12 @@ mod tests {
                 Local {
                     name: "a",
                     depth: Some(1),
+                    is_captured: false,
                 },
                 Local {
                     name: "b",
                     depth: Some(2),
+                    is_captured: false,
                 },
             ],
             upvalues: vec![],
@@ -275,10 +289,12 @@ mod tests {
                 Local {
                     name: "a",
                     depth: Some(2),
+                    is_captured: false,
                 },
                 Local {
                     name: "b",
                     depth: Some(2),
+                    is_captured: false,
                 },
             ],
             upvalues: vec![],
@@ -299,14 +315,17 @@ mod tests {
                 Local {
                     name: "a",
                     depth: Some(1),
+                    is_captured: false,
                 },
                 Local {
                     name: "b",
                     depth: Some(2),
+                    is_captured: false,
                 },
                 Local {
                     name: "c",
                     depth: None,
+                    is_captured: false,
                 },
             ],
             upvalues: vec![],
@@ -328,14 +347,17 @@ mod tests {
                 Local {
                     name: "a",
                     depth: Some(1),
+                    is_captured: false,
                 },
                 Local {
                     name: "b",
                     depth: Some(2),
+                    is_captured: false,
                 },
                 Local {
                     name: "c",
                     depth: None,
+                    is_captured: false,
                 },
             ],
             upvalues: vec![],
@@ -359,14 +381,17 @@ mod tests {
                 Local {
                     name: "a",
                     depth: Some(1),
+                    is_captured: false,
                 },
                 Local {
                     name: "a",
                     depth: Some(2),
+                    is_captured: false,
                 },
                 Local {
                     name: "a",
                     depth: None,
+                    is_captured: false,
                 },
             ],
             upvalues: vec![],
@@ -376,7 +401,7 @@ mod tests {
             chunk: Chunk::new(empty_src()),
         };
         assert_eq!(
-            compiler.resolve_locale("a"),
+            compiler.resolve_local("a"),
             Some(ResolveResult {
                 slot: 2,
                 initialized: false
@@ -393,14 +418,17 @@ mod tests {
                 Local {
                     name: "a",
                     depth: Some(1),
+                    is_captured: false,
                 },
                 Local {
                     name: "a",
                     depth: Some(2),
+                    is_captured: false,
                 },
                 Local {
                     name: "b",
                     depth: None,
+                    is_captured: false,
                 },
             ],
             upvalues: vec![],
@@ -410,7 +438,7 @@ mod tests {
             chunk: Chunk::new(empty_src()),
         };
         assert_eq!(
-            compiler.resolve_locale("a"),
+            compiler.resolve_local("a"),
             Some(ResolveResult {
                 slot: 1,
                 initialized: true
