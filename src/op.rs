@@ -31,4 +31,5 @@ pub enum Op {
     Loop(u16),
     Call(u8),
     Closure(u8),
+    CloseUpvalue,
 }

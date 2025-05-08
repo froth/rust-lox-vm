@@ -1,0 +1,31 @@
+interpret
+fun outer() {
+  var z;
+  var non_local = "nonlocal";
+  {
+    var x = "outside";
+    var x1 = "outout";
+    var unneeded = nil;
+    var x2 = "outoutout";
+    fun inner() {
+      var y = 1;
+      print x;
+      print x1;
+      print x2;
+      fun inner_inner() {
+        print non_local;
+      }
+      inner_inner();
+    }
+    z = inner;
+  }
+  return z;
+}
+
+var closure = outer();
+closure();
+----
+outside
+outout
+outoutout
+nonlocal

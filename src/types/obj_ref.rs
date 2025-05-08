@@ -1,4 +1,8 @@
-use std::{fmt::Display, ops::Deref, ptr::NonNull};
+use std::{
+    fmt::Display,
+    ops::{Deref, DerefMut},
+    ptr::NonNull,
+};
 
 use super::obj::Obj;
 
@@ -17,6 +21,13 @@ impl Deref for ObjRef {
     fn deref(&self) -> &Self::Target {
         // SAFETY ptr is guaranteed to be managed by GC and has proper alignment and type
         unsafe { self.0.as_ref() }
+    }
+}
+
+impl DerefMut for ObjRef {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY ptr is guaranteed to be managed by GC and has proper alignment and type
+        unsafe { self.0.as_mut() }
     }
 }
 

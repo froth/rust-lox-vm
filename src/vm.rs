@@ -1,7 +1,7 @@
 use std::{
     alloc::{self, Layout},
     fmt::Write as _,
-    ops::Deref,
+    ops::{Deref, DerefMut},
 };
 
 use miette::{LabeledSpan, NamedSource, SourceSpan};
@@ -30,12 +30,19 @@ pub struct VM {
     globals: HashTable,
     printer: Box<dyn Printer>,
     sources: Vec<NamedSource<String>>,
+    open_upvalues: Option<ObjRef>,
 }
 
 struct CallFrame {
     closure: ObjRef,
     ip: *const Op,
     slots: *mut Value,
+}
+
+struct UpvalueLocation {
+    location: *mut Value,
+    current: ObjRef,
+    next: Option<ObjRef>,
 }
 
 impl CallFrame {
@@ -122,6 +129,7 @@ impl VM {
             globals,
             printer: Box::new(ConsolePrinter),
             sources: vec![],
+            open_upvalues: None,
         };
         vm.define_native("clock", |_, _| {
             let millis = std::time::SystemTime::now()
@@ -183,6 +191,7 @@ impl VM {
                 Op::Return => {
                     let result = self.pop();
                     let slots = self.current_frame().slots;
+                    self.close_upvalues(slots);
                     self.frame_count -= 1;
                     if self.frame_count == 0 {
                         self.pop();
@@ -280,7 +289,7 @@ impl VM {
                 },
                 Op::GetUpvalue(index) => unsafe {
                     let upvalue = self.current_frame().upvalues()[index as usize];
-                    if let Obj::Upvalue(location) = upvalue.deref() {
+                    if let Obj::Upvalue { location, .. } = upvalue.deref() {
                         self.push(**location);
                     } else {
                         unreachable!()
@@ -288,7 +297,7 @@ impl VM {
                 },
                 Op::SetUpvalue(index) => unsafe {
                     let upvalue = self.current_frame().upvalues()[index as usize];
-                    if let Obj::Upvalue(location) = upvalue.deref() {
+                    if let Obj::Upvalue { location, .. } = upvalue.deref() {
                         **location = self.peek(0)
                     } else {
                         unreachable!()
@@ -310,46 +319,127 @@ impl VM {
                     self.call_value(callee, arg_count)?
                 }
                 Op::Closure(index) => {
-                    let function = self.current_frame().chunk().constants[index as usize];
-                    if let Value::Obj(obj) = function {
-                        if let Obj::Function(f) = obj.deref() {
-                            let upvalues = f
-                                .upvalues()
-                                .iter()
-                                .map(|u| {
-                                    if u.is_local() {
-                                        let value = unsafe {
-                                            self.current_frame().slots.add(index as usize)
-                                        };
-                                        self.capture_upvalue(value)
-                                    } else {
-                                        self.current_frame().upvalues()[index as usize]
-                                    }
-                                })
-                                .collect();
-                            let closure = Obj::Closure {
-                                function: obj,
-                                upvalues,
-                            };
-                            let closure = self.gc.manage(closure);
-                            self.push(Value::Obj(closure));
-                        } else {
-                            unreachable!(
-                                "expected function at closure index but was {:?}",
-                                function
-                            );
-                        }
-                    } else {
-                        unreachable!("expected function at closure index but was {:?}", function);
-                    }
+                    self.handle_closure(index);
                 }
+                Op::CloseUpvalue => unsafe {
+                    self.close_upvalues(self.stack_top.sub(1));
+                    self.pop();
+                },
             }
         }
     }
 
+    fn close_upvalues(&mut self, last: *mut Value) {
+        while let Some(UpvalueLocation {
+            location,
+            mut current,
+            next: _,
+        }) = Self::upvalue_location(self.open_upvalues)
+        {
+            if location < last {
+                break;
+            }
+            if let Obj::Upvalue {
+                location,
+                next,
+                closed,
+            } = current.deref_mut()
+            {
+                unsafe { *closed = **location };
+                *location = closed;
+                self.open_upvalues = *next;
+            } else {
+                unreachable!()
+            }
+        }
+    }
+
+    fn handle_closure(&mut self, index: u8) {
+        let function = self.current_frame().chunk().constants[index as usize];
+        if let Value::Obj(obj) = function {
+            if let Obj::Function(f) = obj.deref() {
+                let upvalues = f
+                    .upvalues()
+                    .iter()
+                    .map(|u| {
+                        if u.is_local() {
+                            let value =
+                                unsafe { self.current_frame().slots.add(u.index() as usize) };
+                            self.capture_upvalue(value)
+                        } else {
+                            self.current_frame().upvalues()[u.index() as usize]
+                        }
+                    })
+                    .collect();
+                let closure = Obj::Closure {
+                    function: obj,
+                    upvalues,
+                };
+                let closure = self.gc.manage(closure);
+                self.push(Value::Obj(closure));
+            } else {
+                unreachable!("expected function at closure index but was {:?}", function);
+            }
+        } else {
+            unreachable!("expected function at closure index but was {:?}", function);
+        }
+    }
+
     fn capture_upvalue(&mut self, local: *mut Value) -> ObjRef {
-        let upvalue = Obj::Upvalue(local);
-        self.gc.manage(upvalue)
+        let mut prev_upvalue: Option<ObjRef> = None;
+        let mut upvalue = self.open_upvalues;
+        while let Some(UpvalueLocation {
+            location,
+            current,
+            next,
+        }) = Self::upvalue_location(upvalue)
+        {
+            if location <= local {
+                break;
+            }
+            prev_upvalue = Some(current);
+            upvalue = next;
+        }
+
+        if let Some(UpvalueLocation {
+            location,
+            current,
+            next: _,
+        }) = Self::upvalue_location(upvalue)
+        {
+            if location == local {
+                return current;
+            }
+        }
+
+        let created_upvalue = Obj::Upvalue {
+            location: local,
+            next: upvalue,
+            closed: Value::Nil,
+        };
+        let created_upvalue = self.gc.manage(created_upvalue);
+        if let Some(mut obj) = prev_upvalue {
+            if let Obj::Upvalue { next, .. } = obj.deref_mut() {
+                *next = Some(created_upvalue);
+            } else {
+                unreachable!()
+            }
+        } else {
+            self.open_upvalues = Some(created_upvalue);
+        }
+        created_upvalue
+    }
+
+    fn upvalue_location(upvalue: Option<ObjRef>) -> Option<UpvalueLocation> {
+        if let Some(Obj::Upvalue { location, next, .. }) = upvalue.as_deref() {
+            Some(UpvalueLocation {
+                location: *location,
+                current: upvalue.unwrap(),
+                next: *next,
+            })
+        } else {
+            None
+        }
     }
 
     fn current_frame(&mut self) -> &mut CallFrame {
@@ -583,7 +673,7 @@ mod tests {
 
     // miri can not run on integration tests, as they require fileaccess
     #[test]
-    fn miri_test() {
+    fn miri_test_for() {
         let input = "for (var a = 1; a<5; a = a +1) {print a;}".to_string();
         let printer = VecPrinter::new();
         let mut vm = VM::with_printer(Box::new(printer.clone()));
@@ -591,6 +681,29 @@ mod tests {
         vm.interpret(named_source).unwrap();
         assert_eq!(vm.stack_top, vm.stack, "Stack is not empty");
         assert_eq!(printer.get_output(), "1\n2\n3\n4\n");
+    }
+
+    #[test]
+    fn miri_test_closure() {
+        let input = r#"
+fun outer() {
+  var x = "outside";
+  fun inner() {
+    var y = 1;
+    print x;
+  }
+  return inner;
+}
+
+var closure = outer();
+closure();"#
+            .to_string();
+        let printer = VecPrinter::new();
+        let mut vm = VM::with_printer(Box::new(printer.clone()));
+        let named_source = NamedSource::new("miri_test", input.clone());
+        vm.interpret(named_source).unwrap();
+        assert_eq!(vm.stack_top, vm.stack, "Stack is not empty");
+        assert_eq!(printer.get_output(), "outside\n");
     }
 
     fn format_json(json: String) -> String {

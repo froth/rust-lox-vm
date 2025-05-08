@@ -56,7 +56,7 @@ impl Parser<'_, '_> {
     }
 
     fn named_variable(&mut self, name: &str, can_assign: bool, location: SourceSpan) -> Result<()> {
-        let (get_op, set_op) = if let Some(resolved) = self.current.resolve_locale(name) {
+        let (get_op, set_op) = if let Some(resolved) = self.current.resolve_local(name) {
             if !resolved.initialized {
                 miette::bail!(
                     labels = vec![LabeledSpan::at(location, "here")],
