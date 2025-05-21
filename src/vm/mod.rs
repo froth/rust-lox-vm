@@ -13,7 +13,7 @@ use crate::{
     chunk::Chunk,
     datastructures::hash_table::HashTable,
     error::InterpreterError,
-    gc::{Gc, GcAlloc},
+    gc::Gc,
     op::Op,
     parser::Parser,
     printer::{ConsolePrinter, Printer},
@@ -152,7 +152,7 @@ impl VM {
             Err(e) => return Err(InterpreterError::CompileError(e.with_source_code(src))),
         };
 
-        let function = self.alloc(function);
+        let function = self.gc.alloc(function); // gc.alloc to prevent collection
         self.push(Value::Obj(function));
         let closure = self.alloc(Obj::Closure {
             function,

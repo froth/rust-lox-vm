@@ -1,3 +1,5 @@
+use crate::gc::markable::Markable;
+use crate::gc::Gc;
 use crate::types::obj::Obj;
 use crate::types::obj_ref::ObjRef;
 use crate::types::string::hash_str;
@@ -168,6 +170,27 @@ impl HashTable {
             memory::free_array(old_entities, old_capacity as usize);
         }
     }
+
+    pub fn mark(&self, gc: &mut Gc) {
+        for i in 0..self.capacity {
+            let mut entry = unsafe { *self.entries.as_ptr().add(i as usize) };
+            if let Some(mut key) = entry.key {
+                gc.mark(&mut key);
+                gc.mark(&mut entry.value);
+            }
+        }
+    }
+
+    pub fn remove_white(&mut self) {
+        for i in 0..self.capacity {
+            let entry = unsafe { *self.entries.as_ptr().add(i as usize) };
+            if let Some(mut key) = entry.key {
+                if !key.is_marked() {
+                    self.delete(key);
+                }
+            }
+        }
+    }
 }
 
 impl Drop for HashTable {
@@ -183,7 +206,7 @@ impl std::fmt::Debug for HashTable {
         let mut entries = String::new();
         let mut real_count = 0;
         for i in 0..self.capacity {
-            let entry = unsafe { (*self.entries.as_ptr().add(i as usize)).clone() };
+            let entry = unsafe { *self.entries.as_ptr().add(i as usize) };
             if let Some(key) = entry.key {
                 write!(&mut entries, "[{}:{:?}=>{:?}] ", i, key, entry.value)?;
                 real_count += 1;
@@ -198,7 +221,7 @@ impl std::fmt::Debug for HashTable {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 struct Entry {
     key: Option<Value>,
     value: Value,
