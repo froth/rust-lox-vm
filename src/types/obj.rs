@@ -6,7 +6,16 @@ use super::string::LoxString;
 use super::value::Value;
 use super::Hashable;
 use crate::types::Hash;
+pub struct ObjStruct {
+    pub obj: Obj,
+    pub marked: bool,
+}
 
+impl ObjStruct {
+    pub fn new(obj: Obj) -> Self {
+        Self { obj, marked: false }
+    }
+}
 pub enum Obj {
     String(LoxString),
     Function(Function),

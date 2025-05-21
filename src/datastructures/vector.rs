@@ -44,15 +44,6 @@ impl<T> LoxVector<T> {
         self.count += 1;
     }
 
-    pub fn pop(&mut self) -> Option<T> {
-        if self.count == 0 {
-            None
-        } else {
-            self.count -= 1;
-            unsafe { Some(ptr::read(self.ptr.as_ptr().add(self.count))) }
-        }
-    }
-
     pub fn ptr(&self) -> *const T {
         self.ptr.as_ptr()
     }

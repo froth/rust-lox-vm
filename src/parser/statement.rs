@@ -55,9 +55,7 @@ impl Parser<'_, '_> {
             if self.current.is_local() {
                 Ok(None)
             } else {
-                Ok(Some(
-                    self.current.identifier_constant(self.gc.manage_str(id)),
-                ))
+                Ok(Some(self.current.identifier_constant(self.gc.alloc(id))))
             }
         } else {
             miette::bail!(
@@ -103,7 +101,7 @@ impl Parser<'_, '_> {
 
         let closing_location = self.block()?;
         let function = self.end_compiler(closing_location);
-        let obj_ref = self.gc.manage(Obj::Function(function));
+        let obj_ref = self.gc.alloc(Obj::Function(function));
         let idx = self.current.chunk.add_constant(Value::Obj(obj_ref));
         self.current.chunk.write(Op::Closure(idx), closing_location);
         Ok(())

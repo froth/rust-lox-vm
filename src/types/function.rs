@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
-use crate::chunk::Chunk;
+use crate::{
+    chunk::Chunk,
+    gc::{markable::Markable, Gc},
+};
 
 use super::{string::LoxString, upvalue::UpvalueIndex, Hash, Hashable};
 
@@ -40,6 +43,16 @@ impl Function {
 
     pub fn upvalues(&self) -> &[UpvalueIndex] {
         &self.upvalues
+    }
+}
+
+impl Markable for Function {
+    fn mark(&mut self, gc: &mut Gc) {
+        self.chunk.constants.iter_mut().for_each(|c| gc.mark(c));
+    }
+
+    fn is_marked(&mut self) -> bool {
+        unreachable!()
     }
 }
 

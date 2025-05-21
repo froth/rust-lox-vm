@@ -5,6 +5,8 @@ edition = "2021"
 license = "Apache-2.0"
 authors = ["Fred Roth"]
 description = "An interpreter for the Lox language (http://craftinginterpreters.com/)"
+[features]
+stress_gc = []
 
 [dependencies]
 clap = { version = "4.5.28", features = ["derive", "env", "string"] }

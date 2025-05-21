@@ -8,7 +8,7 @@ use rustyline::{
 };
 use std::fs;
 use tracing::Level;
-use tracing_subscriber::FmtSubscriber;
+use tracing_subscriber::{filter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
 use vm::VM;
 
 mod args;
@@ -33,9 +33,26 @@ fn main() {
     } else {
         Level::INFO
     };
-    let subscriber = FmtSubscriber::builder().with_max_level(level).finish();
 
-    tracing::subscriber::set_global_default(subscriber).unwrap();
+    let gc_level = if args.gc_log {
+        Level::TRACE
+    } else {
+        Level::INFO
+    };
+
+    let filter = filter::Targets::new()
+        .with_target("rust_lox_vm::gc", gc_level)
+        .with_target("rust_lox_vm::gc::*", gc_level)
+        .with_target("rust_lox_vm::vm::gc", gc_level)
+        .with_target("rust_lox_vm", level);
+
+    // Build a new subscriber with the `fmt` layer using the `Targets`
+    // filter we constructed above.
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(filter)
+        .init();
+
     let vm = VM::new();
     let result = match args.file {
         Some(file) => run_file(vm, file),

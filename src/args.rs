@@ -14,6 +14,10 @@ pub struct Args {
     /// Verbose debug information
     #[clap(short, long, default_value_t)]
     pub verbose: bool,
+
+    /// Garbage collection logs
+    #[clap(short, long, default_value_t)]
+    pub gc_log: bool,
 }
 
 fn get_default_history_file() -> PathBuf {
