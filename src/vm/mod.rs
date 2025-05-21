@@ -1,3 +1,5 @@
+mod gc;
+
 use std::{
     alloc::{self, Layout},
     fmt::Write as _,
@@ -11,7 +13,7 @@ use crate::{
     chunk::Chunk,
     datastructures::hash_table::HashTable,
     error::InterpreterError,
-    gc::Gc,
+    gc::{Gc, GcAlloc},
     op::Op,
     parser::Parser,
     printer::{ConsolePrinter, Printer},
@@ -150,9 +152,9 @@ impl VM {
             Err(e) => return Err(InterpreterError::CompileError(e.with_source_code(src))),
         };
 
-        let function = self.gc.manage(function);
+        let function = self.alloc(function);
         self.push(Value::Obj(function));
-        let closure = self.gc.manage(Obj::Closure {
+        let closure = self.alloc(Obj::Closure {
             function,
             upvalues: vec![],
         });
@@ -375,7 +377,7 @@ impl VM {
                     function: obj,
                     upvalues,
                 };
-                let closure = self.gc.manage(closure);
+                let closure = self.alloc(closure);
                 self.push(Value::Obj(closure));
             } else {
                 unreachable!("expected function at closure index but was {:?}", function);
@@ -417,7 +419,7 @@ impl VM {
             next: upvalue,
             closed: Value::Nil,
         };
-        let created_upvalue = self.gc.manage(created_upvalue);
+        let created_upvalue = self.alloc(created_upvalue);
         if let Some(mut obj) = prev_upvalue {
             if let Obj::Upvalue { next, .. } = obj.deref_mut() {
                 *next = Some(created_upvalue);
@@ -522,7 +524,7 @@ impl VM {
                 if let (Obj::String(a), Obj::String(b)) = (a.deref(), b.deref()) {
                     self.pop();
                     self.pop();
-                    let concated = self.gc.manage_string(a.string.to_owned() + &b.string);
+                    let concated = self.alloc(a.string.to_owned() + &b.string);
                     self.push(Value::Obj(concated));
                 } else {
                     miette::bail!(
@@ -599,9 +601,9 @@ impl VM {
     }
 
     fn define_native(&mut self, name: &str, function: fn(u8, *mut Value) -> Value) {
-        let name = self.gc.manage_str(name);
+        let name = self.alloc(name);
         self.push(Value::Obj(name));
-        let function = self.gc.manage(Obj::Native(function));
+        let function = self.alloc(Obj::Native(function));
         self.push(Value::Obj(function));
         self.globals.insert(self.peek(1), self.peek(0));
         self.pop();

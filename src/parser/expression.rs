@@ -68,7 +68,7 @@ impl Parser<'_, '_> {
         } else if let Some(upvalue_index) = self.current.resolve_upvalue(name) {
             (Op::GetUpvalue(upvalue_index), Op::SetUpvalue(upvalue_index))
         } else {
-            let arg = self.current.identifier_constant(self.gc.manage_str(name));
+            let arg = self.current.identifier_constant(self.gc.alloc(name));
             (Op::GetGlobal(arg), Op::SetGlobal(arg))
         };
         if can_assign && match_token!(self.scanner, TokenType::Equal)?.is_some() {
@@ -90,7 +90,7 @@ impl Parser<'_, '_> {
             TokenType::True => self.current.chunk.write(Op::True, token.location),
             TokenType::False => self.current.chunk.write(Op::False, token.location),
             TokenType::String(s) => {
-                let obj = self.gc.manage_str(s);
+                let obj = self.gc.alloc(s);
                 self.current.emit_constant(Value::Obj(obj), token.location)
             }
             TokenType::Identifier(name) => self.named_variable(name, can_assign, token.location)?,

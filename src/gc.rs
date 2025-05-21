@@ -25,34 +25,19 @@ impl Gc {
         }
     }
 
-    fn collect_garbage(&mut self) {
-        debug!("gc begin");
-        debug!("gc end");
-    }
-
-    pub fn manage_string(&mut self, string: String) -> ObjRef {
-        self.strings
-            .find_string(&string)
-            .unwrap_or_else(|| self.manage_lox_string(LoxString::string(string)))
-    }
-
-    pub fn manage_str(&mut self, string: &str) -> ObjRef {
-        self.strings
-            .find_string(string)
-            .unwrap_or_else(|| self.manage_lox_string(LoxString::from_str(string)))
+    pub fn alloc(&mut self, object: impl GcAlloc) -> ObjRef {
+        object.alloc(self)
     }
 
     fn manage_lox_string(&mut self, lox_string: LoxString) -> ObjRef {
         let obj = Obj::String(lox_string);
-        let obj_ref = self.manage(obj);
+        let obj_ref = self.add_to_gc(obj);
         // intern the string
         self.strings.insert(Value::Obj(obj_ref), Value::Nil);
         obj_ref
     }
 
-    pub fn manage(&mut self, obj: Obj) -> ObjRef {
-        #[cfg(feature = "stress_gc")]
-        self.collect_garbage();
+    fn add_to_gc(&mut self, obj: Obj) -> ObjRef {
         unsafe {
             let old_head = self.head.take();
             let new_node = Box::into_raw(Box::new(Node {
@@ -86,6 +71,32 @@ impl Drop for Gc {
     }
 }
 
+pub trait GcAlloc {
+    fn alloc(self, gc: &mut Gc) -> ObjRef;
+}
+
+impl GcAlloc for String {
+    fn alloc(self, gc: &mut Gc) -> ObjRef {
+        gc.strings
+            .find_string(&self)
+            .unwrap_or_else(|| gc.manage_lox_string(LoxString::string(self)))
+    }
+}
+
+impl GcAlloc for &str {
+    fn alloc(self, gc: &mut Gc) -> ObjRef {
+        gc.strings
+            .find_string(self)
+            .unwrap_or_else(|| gc.manage_lox_string(LoxString::from_str(self)))
+    }
+}
+
+impl GcAlloc for Obj {
+    fn alloc(self, gc: &mut Gc) -> ObjRef {
+        gc.add_to_gc(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -94,19 +105,19 @@ mod tests {
     #[test]
     fn push() {
         let mut gc = Gc::new();
-        let one = gc.manage_str("asfsaf");
+        let one = gc.alloc("asfsaf");
         assert_eq!(one.to_string(), "asfsaf");
-        let two = gc.manage_str("sfdsdfsaf");
+        let two = gc.alloc("sfdsdfsaf");
         assert_eq!(two.to_string(), "sfdsdfsaf");
-        let three = gc.manage_str("sfdsasdasddfsaf");
+        let three = gc.alloc("sfdsasdasddfsaf");
         assert_eq!(three.to_string(), "sfdsasdasddfsaf");
     }
 
     #[test]
     fn string_interning() {
         let mut gc = Gc::new();
-        let one = gc.manage_str("asfsaf");
-        let two = gc.manage_str("asfsaf");
+        let one = gc.alloc("asfsaf");
+        let two = gc.alloc("asfsaf");
         assert_eq!(one, two);
     }
 }

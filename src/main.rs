@@ -42,6 +42,7 @@ fn main() {
 
     let filter = filter::Targets::new()
         .with_target("rust_lox_vm::gc", gc_level)
+        .with_target("rust_lox_vm::vm::gc", gc_level)
         .with_target("rust_lox_vm", level);
 
     // Build a new subscriber with the `fmt` layer using the `Targets`

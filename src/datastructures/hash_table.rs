@@ -264,7 +264,7 @@ mod tests {
         let mut gc = Gc::new();
         let mut table: HashTable = HashTable::new();
         for i in 0..2049 {
-            let obj_ref = gc.manage_string(format!("key{}", i));
+            let obj_ref = gc.alloc(format!("key{}", i));
             let key = Value::Obj(obj_ref);
             let inserted = table.insert(key, Value::Number(f64::from(i)));
             assert!(inserted);
@@ -280,7 +280,7 @@ mod tests {
         let mut gc = Gc::new();
         let mut table: HashTable = HashTable::new();
         for i in 0..5 {
-            let obj_ref = gc.manage_string(format!("key{}", i));
+            let obj_ref = gc.alloc(format!("key{}", i));
             let key = Value::Obj(obj_ref);
             table.insert(key, Value::Number(f64::from(i)));
             table.delete(key);
@@ -288,7 +288,7 @@ mod tests {
         assert_eq!(table.count, 5);
         assert_eq!(table.capacity, 8);
         for i in 6..14 {
-            let obj_ref = gc.manage_string(format!("key{}", i));
+            let obj_ref = gc.alloc(format!("key{}", i));
             let key = Value::Obj(obj_ref);
             table.insert(key, Value::Number(f64::from(i)));
         }
@@ -300,15 +300,15 @@ mod tests {
     fn handle_tombstones_correctly() {
         let mut gc = Gc::new();
         // all those keys have hash % 8 == 2
-        let key1 = Value::Obj(gc.manage_string("3".to_string()));
+        let key1 = Value::Obj(gc.alloc("3".to_string()));
         let value1 = Value::Number(1.0);
-        let key2 = Value::Obj(gc.manage_string("12".to_string()));
+        let key2 = Value::Obj(gc.alloc("12".to_string()));
         let value2 = Value::Number(2.0);
-        let key3 = Value::Obj(gc.manage_string("23".to_string()));
+        let key3 = Value::Obj(gc.alloc("23".to_string()));
         let value3 = Value::Number(3.0);
 
         // has hash % 8 == 3
-        let key4 = Value::Obj(gc.manage_string("key5".to_string()));
+        let key4 = Value::Obj(gc.alloc("key5".to_string()));
         let value4 = Value::Number(4.0);
         let mut table: HashTable = HashTable::new();
 
@@ -333,12 +333,12 @@ mod tests {
     fn find_str() {
         let mut gc = Gc::new();
         // all those keys have hash % 8 == 2
-        let key1 = Value::Obj(gc.manage_string("3".to_string()));
+        let key1 = Value::Obj(gc.alloc("3".to_string()));
         let value1 = Value::Number(1.0);
-        let key2_obj = gc.manage_string("12".to_string());
+        let key2_obj = gc.alloc("12".to_string());
         let key2 = Value::Obj(key2_obj);
         let value2 = Value::Number(2.0);
-        let key3 = Value::Obj(gc.manage_string("23".to_string()));
+        let key3 = Value::Obj(gc.alloc("23".to_string()));
         let value3 = Value::Number(3.0);
 
         let mut table: HashTable = HashTable::new();
@@ -355,7 +355,7 @@ mod tests {
         let mut gc = Gc::new();
         let mut from: HashTable = HashTable::new();
         for i in 0..2049 {
-            let obj_ref = gc.manage_string(format!("key{}", i));
+            let obj_ref = gc.alloc(format!("key{}", i));
             let key = Value::Obj(obj_ref);
             from.insert(key, Value::Number(f64::from(i)));
         }
