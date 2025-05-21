@@ -6,7 +6,6 @@ license = "Apache-2.0"
 authors = ["Fred Roth"]
 description = "An interpreter for the Lox language (http://craftinginterpreters.com/)"
 [features]
-default = ["stress_gc"] # TODO: remove me when gc finished
 stress_gc = []
 
 [dependencies]

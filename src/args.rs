@@ -15,7 +15,7 @@ pub struct Args {
     #[clap(short, long, default_value_t)]
     pub verbose: bool,
 
-    /// Verbose debug information
+    /// Garbage collection logs
     #[clap(short, long, default_value_t)]
     pub gc_log: bool,
 }

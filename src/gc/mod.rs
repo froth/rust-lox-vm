@@ -127,8 +127,8 @@ impl Gc {
                 next: old_head,
                 obj_struct: ObjStruct::new(obj),
             }));
-            let new_node = NonNull::new_unchecked(new_node);
-            let obj_ptr: *mut ObjStruct = &mut (*new_node.as_ptr()).obj_struct;
+            let mut new_node = NonNull::new_unchecked(new_node);
+            let obj_ptr: *mut ObjStruct = &mut (new_node.as_mut()).obj_struct;
             let obj_ref = ObjRef::new(NonNull::new_unchecked(obj_ptr));
             self.head = Some(new_node);
             debug!("{:p} allocate {}", obj_ptr, *obj_ref);
