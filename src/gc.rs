@@ -1,5 +1,7 @@
 use std::ptr::NonNull;
 
+use tracing::debug;
+
 use crate::{
     datastructures::hash_table::HashTable,
     types::{obj::Obj, obj_ref::ObjRef, string::LoxString, value::Value},
@@ -23,6 +25,11 @@ impl Gc {
         }
     }
 
+    fn collect_garbage(&mut self) {
+        debug!("gc begin");
+        debug!("gc end");
+    }
+
     pub fn manage_string(&mut self, string: String) -> ObjRef {
         self.strings
             .find_string(&string)
@@ -44,6 +51,8 @@ impl Gc {
     }
 
     pub fn manage(&mut self, obj: Obj) -> ObjRef {
+        #[cfg(feature = "stress_gc")]
+        self.collect_garbage();
         unsafe {
             let old_head = self.head.take();
             let new_node = Box::into_raw(Box::new(Node {
@@ -54,18 +63,25 @@ impl Gc {
             let obj_ptr: *mut Obj = &mut (*new_node.as_ptr()).obj;
             let obj_ref = ObjRef::new(NonNull::new_unchecked(obj_ptr));
             self.head = Some(new_node);
+            debug!("{:p} allocate {}", obj_ptr, *obj_ref);
             obj_ref
+        }
+    }
+
+    fn free(&mut self, ptr: NonNull<Node>) -> Box<Node> {
+        unsafe {
+            let node = ptr.as_ptr();
+            debug!("{:p} free {}", &((*node).obj), (*node).obj);
+            Box::from_raw(node)
         }
     }
 }
 
 impl Drop for Gc {
     fn drop(&mut self) {
-        unsafe {
-            let mut cur_link = self.head.take();
-            while let Some(boxed_node) = cur_link {
-                cur_link = Box::from_raw(boxed_node.as_ptr()).next.take();
-            }
+        let mut cur_link = self.head.take();
+        while let Some(boxed_node) = cur_link {
+            cur_link = self.free(boxed_node).next.take();
         }
     }
 }

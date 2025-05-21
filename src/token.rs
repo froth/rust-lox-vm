@@ -88,7 +88,6 @@ pub enum Precedence {
     Factor,
     Unary,
     Call,
-    Primary,
 }
 
 impl TokenType<'_> {
