@@ -24,9 +24,9 @@ pub struct Gc {
     next_gc: usize,
 }
 
-struct Node {
+pub struct Node {
     next: Option<NonNull<Node>>,
-    obj_struct: ObjStruct,
+    pub obj_struct: ObjStruct,
 }
 static GC_GROW_FACTOR: usize = 2;
 
@@ -95,7 +95,13 @@ impl Gc {
     }
 
     fn blacken(&mut self, obj: &mut ObjRef) {
-        unsafe { debug!("{:p} blacken {}", obj.0.as_ptr(), obj.0.as_ref().obj) };
+        unsafe {
+            debug!(
+                "{:p} blacken {}",
+                obj.0.as_ptr(),
+                obj.0.as_ref().obj_struct.obj
+            )
+        };
         match obj.deref_mut() {
             Obj::Native(_) | Obj::String(_) => (),
             Obj::Function(function) => self.mark(function),
@@ -127,8 +133,8 @@ impl Gc {
                 next: old_head,
                 obj_struct: ObjStruct::new(obj),
             }));
-            let mut new_node = NonNull::new_unchecked(new_node);
-            let obj_ptr: *mut ObjStruct = &mut (new_node.as_mut()).obj_struct;
+            let new_node = NonNull::new_unchecked(new_node);
+            let obj_ptr: *mut Node = new_node.as_ptr();
             let obj_ref = ObjRef::new(NonNull::new_unchecked(obj_ptr));
             self.head = Some(new_node);
             debug!("{:p} allocate {}", obj_ptr, *obj_ref);

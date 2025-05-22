@@ -12,17 +12,21 @@ pub trait Markable {
 impl Markable for ObjRef {
     fn mark(&mut self, gc: &mut Gc) {
         unsafe {
-            debug!("{:p} mark {}", self.0.as_ptr(), self.0.as_ref().obj);
-            if self.0.as_ref().marked {
+            debug!(
+                "{:p} mark {}",
+                self.0.as_ptr(),
+                self.0.as_ref().obj_struct.obj
+            );
+            if self.0.as_ref().obj_struct.marked {
                 return;
             }
-            self.0.as_mut().marked = true;
+            self.0.as_mut().obj_struct.marked = true;
             gc.grey(*self);
         }
     }
 
     fn is_marked(&mut self) -> bool {
-        unsafe { self.0.as_ref().marked }
+        unsafe { self.0.as_ref().obj_struct.marked }
     }
 }
 impl Markable for Value {
@@ -34,7 +38,7 @@ impl Markable for Value {
 
     fn is_marked(&mut self) -> bool {
         if let Value::Obj(obj) = self {
-            unsafe { obj.0.as_ref().marked }
+            unsafe { obj.0.as_ref().obj_struct.marked }
         } else {
             true
         }

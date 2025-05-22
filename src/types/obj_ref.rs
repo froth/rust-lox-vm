@@ -4,13 +4,15 @@ use std::{
     ptr::NonNull,
 };
 
-use super::obj::{Obj, ObjStruct};
+use crate::gc::Node;
+
+use super::obj::Obj;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ObjRef(pub NonNull<ObjStruct>);
+pub struct ObjRef(pub NonNull<Node>);
 
 impl ObjRef {
-    pub fn new(ptr: NonNull<ObjStruct>) -> Self {
+    pub fn new(ptr: NonNull<Node>) -> Self {
         ObjRef(ptr)
     }
 }
@@ -20,14 +22,14 @@ impl Deref for ObjRef {
 
     fn deref(&self) -> &Self::Target {
         // SAFETY ptr is guaranteed to be managed by GC and has proper alignment and type
-        unsafe { &self.0.as_ref().obj }
+        unsafe { &self.0.as_ref().obj_struct.obj }
     }
 }
 
 impl DerefMut for ObjRef {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY ptr is guaranteed to be managed by GC and has proper alignment and type
-        unsafe { &mut self.0.as_mut().obj }
+        unsafe { &mut self.0.as_mut().obj_struct.obj }
     }
 }
 

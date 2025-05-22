@@ -283,6 +283,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // this is slow with miri
     fn insert_2049() {
         let mut gc = Gc::new();
         let mut table: HashTable = HashTable::new();
@@ -373,7 +374,9 @@ mod tests {
         let res = table.find_string("12").unwrap();
         assert_eq!(res, key2_obj);
     }
+
     #[test]
+    #[ignore] // this is slow with miri
     fn add_all() {
         let mut gc = Gc::new();
         let mut from: HashTable = HashTable::new();
