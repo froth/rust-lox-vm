@@ -32,4 +32,5 @@ pub enum Op {
     Call(u8),
     Closure(u8),
     CloseUpvalue,
+    Class(u8),
 }

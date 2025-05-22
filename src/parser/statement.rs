@@ -13,7 +13,9 @@ use crate::{
 
 impl Parser<'_, '_> {
     pub(super) fn declaration(&mut self) {
-        let res = if let Ok(Some(fun_token)) = match_token!(self.scanner, TokenType::Fun) {
+        let res = if let Ok(Some(class_token)) = match_token!(self.scanner, TokenType::Class) {
+            self.class_declaration(class_token.location)
+        } else if let Ok(Some(fun_token)) = match_token!(self.scanner, TokenType::Fun) {
             self.fun_declaration(fun_token.location)
         } else if let Ok(Some(var_token)) = match_token!(self.scanner, TokenType::Var) {
             self.var_declaration(var_token.location)
@@ -24,6 +26,38 @@ impl Parser<'_, '_> {
         if let Err(err) = res {
             self.errors.push(err);
             self.synchronize();
+        }
+    }
+
+    fn class_declaration(&mut self, location: SourceSpan) -> Result<()> {
+        let next = self.scanner.advance()?;
+        if let TokenType::Identifier(name) = next.token_type {
+            let const_idx = self.current.identifier_constant(self.gc.alloc(name));
+            self.current.declare_variable(name, location)?;
+            self.current.chunk.write(Op::Class(const_idx), location);
+            let var_idx = if self.current.is_local() {
+                None
+            } else {
+                Some(const_idx)
+            };
+            self.current.define_variable(var_idx, location);
+            consume!(
+                self,
+                TokenType::LeftBrace,
+                "Expected '{{' before class body"
+            );
+            consume!(
+                self,
+                TokenType::RightBrace,
+                "Expected '}}; after class body"
+            );
+            Ok(())
+        } else {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(next.location, "here")],
+                "Expected variable name but got `{}`",
+                next.token_type
+            )
         }
     }
 

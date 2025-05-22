@@ -229,7 +229,7 @@ impl VM {
                 Op::Multiply => binary_operator!(self, *, Value::Number),
                 Op::Divide => binary_operator!(self, /, Value::Number),
                 Op::Not => {
-                    let pop = self.pop();
+                    let pop: Value = self.pop();
                     self.push(Value::Boolean(pop.is_falsey()))
                 }
                 Op::Equal => {
@@ -327,8 +327,24 @@ impl VM {
                     self.close_upvalues(self.stack_top.sub(1));
                     self.pop();
                 },
+                Op::Class(index) => self.create_class(index),
             }
         }
+    }
+
+    fn create_class(&mut self, index: u8) {
+        let name = self.current_frame().chunk().constants[index as usize];
+        if let Value::Obj(obj) = name {
+            if let Obj::String(string) = obj.deref() {
+                let class = Obj::Class {
+                    name: string.clone(),
+                };
+                let class = self.gc.alloc(class);
+                self.push(Value::Obj(class));
+                return;
+            }
+        }
+        unreachable!()
     }
 
     fn close_upvalues(&mut self, last: *mut Value) {

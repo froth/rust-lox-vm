@@ -6,7 +6,7 @@ use crate::{
 };
 
 use super::{string::LoxString, upvalue::UpvalueIndex, Hash, Hashable};
-
+#[derive(Debug)]
 pub struct Function {
     arity: u8,
     chunk: Chunk,

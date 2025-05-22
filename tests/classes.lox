@@ -1,0 +1,8 @@
+interpret
+class Cat {}
+class Dog {}
+print Cat;
+print Dog;
+----
+Cat
+Dog

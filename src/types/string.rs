@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use super::{Hash, Hashable};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,5 +32,11 @@ pub fn hash_str(str: &str) -> Hash {
 impl Hashable for LoxString {
     fn hash(&self) -> Hash {
         self.hash
+    }
+}
+
+impl Display for LoxString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.string)
     }
 }
