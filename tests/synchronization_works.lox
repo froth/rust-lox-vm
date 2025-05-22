@@ -31,12 +31,12 @@ error
         {
           "label": "here",
           "span": {
-            "length": 5,
-            "offset": 12
+            "length": 0,
+            "offset": 17
           }
         }
       ],
-      "message": "Expected expression but got `class`",
+      "message": "Unexpected EOF",
       "related": [],
       "severity": "error"
     }

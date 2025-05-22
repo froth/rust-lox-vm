@@ -9,6 +9,7 @@ use super::memory;
 /// In clox several special purpose dynamic arrays exist, I made a generic type as it is easy enough in Rust.
 /// I did not use `std::vec` because implementing the datastructures are part of the book
 /// and because the GC uses `crate::memory` to get information about memory consumption
+#[derive(Debug)]
 pub struct LoxVector<T> {
     count: usize,
     capacity: usize,

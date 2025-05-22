@@ -11,6 +11,7 @@ use crate::{
     types::{obj::Obj, value::Value},
 };
 
+#[derive(Debug)]
 pub struct Chunk {
     // in original clox this is Vector<u8> this is more wasteful but way easier. Maybe benchmark in the future?
     pub code: LoxVector<Op>,
@@ -103,7 +104,11 @@ impl Chunk {
         }
 
         match op {
-            Op::Constant(idx) | Op::DefineGlobal(idx) | Op::GetGlobal(idx) | Op::SetGlobal(idx) => {
+            Op::Constant(idx)
+            | Op::DefineGlobal(idx)
+            | Op::GetGlobal(idx)
+            | Op::SetGlobal(idx)
+            | Op::Class(idx) => {
                 let const_index: usize = (*idx).into();
                 let constant = self.constants[const_index];
                 write!(&mut result, "{:<16} {:<4} '{}'", op, const_index, constant)?;

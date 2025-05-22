@@ -16,6 +16,7 @@ impl ObjStruct {
         Self { obj, marked: false }
     }
 }
+#[derive(Debug)]
 pub enum Obj {
     String(LoxString),
     Function(Function),
@@ -28,6 +29,9 @@ pub enum Obj {
         location: *mut Value,
         next: Option<ObjRef>,
         closed: Value,
+    },
+    Class {
+        name: LoxString,
     },
 }
 
@@ -44,6 +48,7 @@ impl Hashable for Obj {
             Obj::Upvalue {
                 location: value, ..
             } => unsafe { (**value).hash() },
+            Obj::Class { name } => name.hash(),
         }
     }
 }
@@ -59,6 +64,7 @@ impl Display for Obj {
                 upvalues: _,
             } => write!(f, "closure over {}", function),
             Obj::Upvalue { location: _, .. } => write!(f, "upvalue"),
+            Obj::Class { name } => write!(f, "{}", name),
         }
     }
 }
