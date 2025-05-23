@@ -8,10 +8,10 @@ use crate::{
 use super::{string::LoxString, upvalue::UpvalueIndex, Hash, Hashable};
 #[derive(Debug)]
 pub struct Function {
-    arity: u8,
-    chunk: Chunk,
     name: Option<LoxString>,
+    arity: u8,
     upvalues: Vec<UpvalueIndex>,
+    chunk: Chunk,
 }
 
 impl Function {

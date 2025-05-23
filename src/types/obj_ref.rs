@@ -1,5 +1,5 @@
 use std::{
-    fmt::Display,
+    fmt::{Debug, Display},
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
@@ -8,7 +8,7 @@ use crate::gc::Node;
 
 use super::obj::Obj;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct ObjRef(pub NonNull<Node>);
 
 impl ObjRef {
@@ -36,5 +36,11 @@ impl DerefMut for ObjRef {
 impl Display for ObjRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.deref())
+    }
+}
+
+impl Debug for ObjRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.deref())
     }
 }

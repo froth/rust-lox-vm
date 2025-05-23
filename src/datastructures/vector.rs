@@ -3,13 +3,14 @@ use std::{
     ptr::{self, NonNull},
 };
 
+use core::fmt::Debug;
+
 use super::memory;
 
 /// Custom Vector type.
 /// In clox several special purpose dynamic arrays exist, I made a generic type as it is easy enough in Rust.
 /// I did not use `std::vec` because implementing the datastructures are part of the book
 /// and because the GC uses `crate::memory` to get information about memory consumption
-#[derive(Debug)]
 pub struct LoxVector<T> {
     count: usize,
     capacity: usize,
@@ -89,6 +90,11 @@ impl<T> DerefMut for LoxVector<T> {
     }
 }
 
+impl<T: std::fmt::Debug> Debug for LoxVector<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::op::Op;
