@@ -1,3 +1,4 @@
+mod callframe;
 mod gc;
 
 use std::{
@@ -6,18 +7,18 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use miette::{LabeledSpan, NamedSource, SourceSpan};
+use callframe::CallFrame;
+use miette::{LabeledSpan, NamedSource};
 use tracing::debug;
 
 use crate::{
-    chunk::Chunk,
     datastructures::hash_table::HashTable,
     error::InterpreterError,
     gc::Gc,
     op::Op,
     parser::Parser,
     printer::{ConsolePrinter, Printer},
-    types::{function::Function, obj::Obj, obj_ref::ObjRef, value::Value},
+    types::{obj::Obj, obj_ref::ObjRef, value::Value},
 };
 
 const FRAMES_MAX: usize = 64;
@@ -35,59 +36,10 @@ pub struct VM {
     open_upvalues: Option<ObjRef>,
 }
 
-struct CallFrame {
-    closure: ObjRef,
-    ip: *const Op,
-    slots: *mut Value,
-}
-
 struct UpvalueLocation {
     location: *mut Value,
     current: ObjRef,
     next: Option<ObjRef>,
-}
-
-impl CallFrame {
-    fn function(&self) -> &Function {
-        if let Obj::Closure {
-            function,
-            upvalues: _,
-        } = self.closure.deref()
-        {
-            if let Obj::Function(function) = function.deref() {
-                return function;
-            }
-        }
-        unreachable!("callframe stored non-closure")
-    }
-
-    fn upvalues(&self) -> &[ObjRef] {
-        if let Obj::Closure {
-            function: _,
-            upvalues,
-        } = self.closure.deref()
-        {
-            upvalues
-        } else {
-            unreachable!("callframe stored non-closure")
-        }
-    }
-
-    fn chunk(&self) -> &Chunk {
-        self.function().chunk()
-    }
-    fn current_index(&self) -> usize {
-        unsafe { self.ip.offset_from(&(*self.function()).chunk().code[0]) as usize }
-    }
-
-    fn current_location(&self) -> SourceSpan {
-        self.chunk().locations[self.current_index()]
-    }
-
-    fn disassemble_at_current_index(&mut self) -> String {
-        let current_index = self.current_index();
-        self.chunk().disassemble_at(current_index)
-    }
 }
 
 macro_rules! binary_operator {
@@ -133,14 +85,22 @@ impl VM {
             sources: vec![],
             open_upvalues: None,
         };
-        vm.define_native("clock", |_, _| {
+        vm.define_native("clock", |_, _, _| {
             let millis = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs_f64();
             Value::Number(millis)
         });
+        vm.define_native("heapdump", |_, _, vm| {
+            vm.heapdump();
+            Value::Nil
+        });
         vm
+    }
+
+    pub fn heapdump(&self) {
+        self.gc.heapdump()
     }
 
     pub fn interpret(
@@ -505,7 +465,7 @@ impl VM {
                     }
                 }
                 Obj::Native(function) => unsafe {
-                    let result = function(arg_count, self.stack_top.sub(arg_count as usize));
+                    let result = function(arg_count, self.stack_top.sub(arg_count as usize), self);
                     self.stack_top = self.stack_top.sub(arg_count as usize + 1);
                     self.push(result);
                     Ok(())
@@ -616,7 +576,7 @@ impl VM {
         trace
     }
 
-    fn define_native(&mut self, name: &str, function: fn(u8, *mut Value) -> Value) {
+    fn define_native(&mut self, name: &str, function: fn(u8, *mut Value, &VM) -> Value) {
         let name = self.alloc(name);
         self.push(Value::Obj(name));
         let function = self.alloc(Obj::Native(function));

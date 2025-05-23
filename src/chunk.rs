@@ -1,6 +1,6 @@
 use miette::{NamedSource, SourceCode, SourceSpan};
 use std::{
-    fmt::{Error, Write as _},
+    fmt::{Debug, Error, Write as _},
     ops::Deref,
     sync::Arc,
 };
@@ -11,7 +11,6 @@ use crate::{
     types::{obj::Obj, value::Value},
 };
 
-#[derive(Debug)]
 pub struct Chunk {
     // in original clox this is Vector<u8> this is more wasteful but way easier. Maybe benchmark in the future?
     pub code: LoxVector<Op>,
@@ -153,6 +152,15 @@ impl Chunk {
             op => write!(&mut result, "{op}")?,
         }
         Ok((result, line_number))
+    }
+}
+
+impl Debug for Chunk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Chunk")
+            .field("code", &self.code)
+            .field("constants", &self.constants)
+            .finish()
     }
 }
 

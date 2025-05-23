@@ -163,6 +163,16 @@ impl Gc {
     pub fn next_gc(&self) -> usize {
         self.next_gc
     }
+
+    pub fn heapdump(&self) {
+        unsafe {
+            let mut cur_link = self.head;
+            while let Some(boxed_node) = cur_link {
+                println!("{:?}", boxed_node.as_ref().obj_struct.obj);
+                cur_link = boxed_node.as_ref().next;
+            }
+        }
+    }
 }
 
 impl Drop for Gc {
