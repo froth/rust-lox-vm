@@ -3,6 +3,10 @@ class Cat {}
 class Dog {}
 print Cat;
 print Dog;
+print Cat();
+print Dog();
 ----
 Cat
 Dog
+Cat instance
+Dog instance

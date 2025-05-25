@@ -6,6 +6,7 @@ use super::obj_ref::ObjRef;
 use super::string::LoxString;
 use super::value::Value;
 use super::Hashable;
+use crate::datastructures::hash_table::HashTable;
 use crate::types::Hash;
 use crate::vm::VM;
 pub struct ObjStruct {
@@ -34,6 +35,35 @@ pub enum Obj {
     Class {
         name: LoxString,
     },
+    Instance {
+        class: ObjRef,
+        fields: HashTable,
+    },
+}
+
+impl Obj {
+    pub fn new_instance(class: ObjRef) -> Self {
+        Self::Instance {
+            class,
+            fields: HashTable::new(),
+        }
+    }
+
+    pub fn as_function(&self) -> &Function {
+        if let Obj::Function(function) = self {
+            function
+        } else {
+            panic!("Value is no Function")
+        }
+    }
+
+    pub fn as_string(&self) -> &LoxString {
+        if let Obj::String(string) = self {
+            string
+        } else {
+            panic!("Value is no String")
+        }
+    }
 }
 
 impl Hashable for Obj {
@@ -50,6 +80,7 @@ impl Hashable for Obj {
                 location: value, ..
             } => unsafe { (**value).hash() },
             Obj::Class { name } => name.hash(),
+            Obj::Instance { class, fields: _ } => class.hash(),
         }
     }
 }
@@ -66,6 +97,7 @@ impl Display for Obj {
             } => write!(f, "closure over {}", function),
             Obj::Upvalue { location: _, .. } => write!(f, "upvalue"),
             Obj::Class { name } => write!(f, "{}", name),
+            Obj::Instance { class, fields: _ } => write!(f, "{} instance", class),
         }
     }
 }
@@ -89,7 +121,7 @@ impl Debug for Obj {
             }
             Self::Upvalue {
                 location,
-                next,
+                next: _,
                 closed,
             } => {
                 let closed_ptr: *const Value = closed;
@@ -100,6 +132,11 @@ impl Debug for Obj {
                     .finish()
             }
             Self::Class { name } => f.debug_struct("Class").field("name", name).finish(),
+            Self::Instance { class, fields } => f
+                .debug_struct("Instance")
+                .field("class", class)
+                .field("fields", fields)
+                .finish(),
         }
     }
 }
