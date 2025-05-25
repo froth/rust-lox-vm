@@ -294,17 +294,10 @@ impl VM {
 
     fn create_class(&mut self, index: u8) {
         let name = self.current_frame().chunk().constants[index as usize];
-        if let Value::Obj(obj) = name {
-            if let Obj::String(string) = obj.deref() {
-                let class = Obj::Class {
-                    name: string.clone(),
-                };
-                let class = self.gc.alloc(class);
-                self.push(Value::Obj(class));
-                return;
-            }
-        }
-        unreachable!()
+        let name = name.as_string();
+        let class = Obj::Class { name: name.clone() };
+        let class = self.gc.alloc(class);
+        self.push(Value::Obj(class));
     }
 
     fn close_upvalues(&mut self, last: *mut Value) {
@@ -333,34 +326,26 @@ impl VM {
     }
 
     fn handle_closure(&mut self, index: u8) {
-        let function = self.current_frame().chunk().constants[index as usize];
-        if let Value::Obj(obj) = function {
-            if let Obj::Function(f) = obj.deref() {
-                let upvalues = f
-                    .upvalues()
-                    .iter()
-                    .map(|u| {
-                        if u.is_local() {
-                            let value =
-                                unsafe { self.current_frame().slots.add(u.index() as usize) };
-                            self.capture_upvalue(value)
-                        } else {
-                            self.current_frame().upvalues()[u.index() as usize]
-                        }
-                    })
-                    .collect();
-                let closure = Obj::Closure {
-                    function: obj,
-                    upvalues,
-                };
-                let closure = self.alloc(closure);
-                self.push(Value::Obj(closure));
-            } else {
-                unreachable!("expected function at closure index but was {:?}", function);
-            }
-        } else {
-            unreachable!("expected function at closure index but was {:?}", function);
-        }
+        let obj = self.current_frame().chunk().constants[index as usize];
+        let function = obj.as_function();
+        let upvalues = function
+            .upvalues()
+            .iter()
+            .map(|u| {
+                if u.is_local() {
+                    let value = unsafe { self.current_frame().slots.add(u.index() as usize) };
+                    self.capture_upvalue(value)
+                } else {
+                    self.current_frame().upvalues()[u.index() as usize]
+                }
+            })
+            .collect();
+        let closure = Obj::Closure {
+            function: *obj.as_obj(),
+            upvalues,
+        };
+        let closure = self.alloc(closure);
+        self.push(Value::Obj(closure));
     }
 
     fn capture_upvalue(&mut self, local: *mut Value) -> ObjRef {
@@ -440,34 +425,37 @@ impl VM {
                     function,
                     upvalues: _,
                 } => {
-                    if let Obj::Function(function) = function.deref() {
-                        if function.arity() != arg_count {
-                            miette::bail!(
-                                labels = vec![LabeledSpan::at(
-                                    self.current_frame().current_location(),
-                                    "here"
-                                )],
-                                "Expected {} arguments but got {}",
-                                function.arity(),
-                                arg_count
-                            )
-                        }
-                        unsafe {
-                            let frame = self.frames.add(self.frame_count);
-                            (*frame).closure = obj;
-                            (*frame).ip = function.chunk().code.ptr();
-                            (*frame).slots = self.stack_top.sub(arg_count as usize + 1);
-                        }
-                        self.frame_count += 1;
-                        Ok(())
-                    } else {
-                        unreachable!("non function wrapped in closure")
+                    let function = function.as_function();
+                    if function.arity() != arg_count {
+                        miette::bail!(
+                            labels = vec![LabeledSpan::at(
+                                self.current_frame().current_location(),
+                                "here"
+                            )],
+                            "Expected {} arguments but got {}",
+                            function.arity(),
+                            arg_count
+                        )
                     }
+                    unsafe {
+                        let frame = self.frames.add(self.frame_count);
+                        (*frame).closure = obj;
+                        (*frame).ip = function.chunk().code.ptr();
+                        (*frame).slots = self.stack_top.sub(arg_count as usize + 1);
+                    }
+                    self.frame_count += 1;
+                    Ok(())
                 }
                 Obj::Native(function) => unsafe {
                     let result = function(arg_count, self.stack_top.sub(arg_count as usize), self);
                     self.stack_top = self.stack_top.sub(arg_count as usize + 1);
                     self.push(result);
+                    Ok(())
+                },
+                Obj::Class { name: _ } => unsafe {
+                    let class = Obj::new_instance(obj);
+                    let class = self.gc.alloc(class);
+                    *self.stack_top.sub(arg_count as usize).sub(1) = Value::Obj(class);
                     Ok(())
                 },
                 _ => miette::bail!(

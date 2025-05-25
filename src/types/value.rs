@@ -1,6 +1,6 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Deref};
 
-use super::{obj_ref::ObjRef, Hash, Hashable};
+use super::{function::Function, obj_ref::ObjRef, string::LoxString, Hash, Hashable};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Value {
@@ -13,6 +13,22 @@ pub enum Value {
 impl Value {
     pub fn is_falsey(&self) -> bool {
         matches!(self, Value::Nil | Value::Boolean(false))
+    }
+
+    pub fn as_obj(&self) -> &ObjRef {
+        if let Value::Obj(obj) = self {
+            obj
+        } else {
+            panic!("Value is no Obj")
+        }
+    }
+
+    pub fn as_string(&self) -> &LoxString {
+        self.as_obj().deref().as_string()
+    }
+
+    pub fn as_function(&self) -> &Function {
+        self.as_obj().deref().as_function()
     }
 }
 
