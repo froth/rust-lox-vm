@@ -22,7 +22,7 @@ impl ObjStruct {
 pub enum Obj {
     String(LoxString),
     Function(Function),
-    Native(fn(u8, *mut Value, &VM) -> Value),
+    Native(fn(u8, *mut Value, &mut VM) -> Value),
     Closure {
         function: ObjRef,
         upvalues: Vec<ObjRef>,

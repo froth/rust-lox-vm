@@ -1,5 +1,6 @@
 mod callframe;
 mod gc;
+mod native_functions;
 
 use std::{
     alloc::{self, Layout},
@@ -85,17 +86,7 @@ impl VM {
             sources: vec![],
             open_upvalues: None,
         };
-        vm.define_native("clock", |_, _, _| {
-            let millis = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs_f64();
-            Value::Number(millis)
-        });
-        vm.define_native("heapdump", |_, _, vm| {
-            vm.heapdump();
-            Value::Nil
-        });
+        vm.define_native_functions();
         vm
     }
 
@@ -562,16 +553,6 @@ impl VM {
             }
         }
         trace
-    }
-
-    fn define_native(&mut self, name: &str, function: fn(u8, *mut Value, &VM) -> Value) {
-        let name = self.alloc(name);
-        self.push(Value::Obj(name));
-        let function = self.alloc(Obj::Native(function));
-        self.push(Value::Obj(function));
-        self.globals.insert(self.peek(1), self.peek(0));
-        self.pop();
-        self.pop();
     }
 }
 
