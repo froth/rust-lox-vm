@@ -28,7 +28,7 @@ impl Parser<'_, '_> {
 
         while precedence <= self.peek_infix_precedence()? {
             let token = self.scanner.advance()?;
-            self.infix(token)?;
+            self.infix(token, can_assign)?;
         }
 
         if can_assign {
@@ -99,7 +99,7 @@ impl Parser<'_, '_> {
         Ok(())
     }
 
-    fn infix(&mut self, token: Token) -> Result<()> {
+    fn infix(&mut self, token: Token, can_assign: bool) -> Result<()> {
         match token.token_type {
             TokenType::Minus => self.binary(Op::Subtract, None, Precedence::Factor, token.location),
             TokenType::Plus => self.binary(Op::Add, None, Precedence::Factor, token.location),
@@ -125,8 +125,35 @@ impl Parser<'_, '_> {
             TokenType::And => self.and(token.location),
             TokenType::Or => self.or(token.location),
             TokenType::LeftParen => self.call(token.location),
+            TokenType::Dot => self.get_set_expression(token.location, can_assign),
             _ => unreachable!(), // guarded by infix_precedence
         }
+    }
+
+    fn get_set_expression(&mut self, location: SourceSpan, can_assign: bool) -> Result<()> {
+        let next = self.scanner.advance()?;
+        let name = if let TokenType::Identifier(name) = next.token_type {
+            name
+        } else {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(next.location, "here")],
+                "Expected property after '.'"
+            )
+        };
+
+        let constant_index = self.current.identifier_constant(self.gc.alloc(name));
+
+        if can_assign && match_token!(self.scanner, TokenType::Equal)?.is_some() {
+            self.expression()?;
+            self.current
+                .chunk
+                .write(Op::SetProperty(constant_index), location);
+        } else {
+            self.current
+                .chunk
+                .write(Op::GetProperty(constant_index), location);
+        }
+        Ok(())
     }
 
     fn binary(

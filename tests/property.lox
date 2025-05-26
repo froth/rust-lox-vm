@@ -1,0 +1,10 @@
+interpret
+class A {}
+var a = A();
+a.x = 1;
+print a.x;
+a.x = 2;
+print a.x;
+----
+1
+2
