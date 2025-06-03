@@ -1,5 +1,6 @@
 pub mod class;
 pub mod function;
+pub mod instance;
 pub mod obj;
 pub mod obj_ref;
 pub mod string;

@@ -115,10 +115,7 @@ impl Gc {
                 closed,
             } => self.mark(closed),
             Obj::Class(class) => self.mark(class),
-            Obj::Instance { class, fields } => {
-                self.mark(class);
-                fields.mark(self);
-            }
+            Obj::Instance(instance) => self.mark(instance),
         }
     }
 

@@ -2,11 +2,11 @@ use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
 use super::function::Function;
+use super::instance::Instance;
 use super::obj_ref::ObjRef;
 use super::string::LoxString;
 use super::value::Value;
 use super::Hashable;
-use crate::datastructures::hash_table::HashTable;
 use crate::types::class::Class;
 use crate::types::Hash;
 use crate::vm::VM;
@@ -34,20 +34,10 @@ pub enum Obj {
         closed: Value,
     },
     Class(Class),
-    Instance {
-        class: ObjRef,
-        fields: HashTable,
-    },
+    Instance(Instance),
 }
 
 impl Obj {
-    pub fn new_instance(class: ObjRef) -> Self {
-        Self::Instance {
-            class,
-            fields: HashTable::new(),
-        }
-    }
-
     pub fn as_function(&self) -> &Function {
         if let Obj::Function(function) = self {
             function
@@ -87,7 +77,7 @@ impl Hashable for Obj {
                 location: value, ..
             } => unsafe { (**value).hash() },
             Obj::Class(class) => class.name().hash(),
-            Obj::Instance { class, fields: _ } => class.hash(),
+            Obj::Instance(instance) => instance.hash(),
         }
     }
 }
@@ -104,7 +94,7 @@ impl Display for Obj {
             } => write!(f, "closure over {}", function),
             Obj::Upvalue { location: _, .. } => write!(f, "upvalue"),
             Obj::Class(class) => write!(f, "{}", class),
-            Obj::Instance { class, fields: _ } => write!(f, "{} instance", class),
+            Obj::Instance(instance) => write!(f, "{}", instance),
         }
     }
 }
@@ -139,11 +129,7 @@ impl Debug for Obj {
                     .finish()
             }
             Self::Class(class) => f.debug_tuple("Class").field(class).finish(),
-            Self::Instance { class, fields } => f
-                .debug_struct("Instance")
-                .field("class", class)
-                .field("fields", fields)
-                .finish(),
+            Self::Instance(instance) => f.debug_tuple("Instance").field(instance).finish(),
         }
     }
 }

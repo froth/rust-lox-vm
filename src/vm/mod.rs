@@ -19,7 +19,7 @@ use crate::{
     op::Op,
     parser::Parser,
     printer::{ConsolePrinter, Printer},
-    types::{class::Class, obj::Obj, obj_ref::ObjRef, value::Value},
+    types::{class::Class, instance::Instance, obj::Obj, obj_ref::ObjRef, value::Value},
 };
 
 const FRAMES_MAX: usize = 64;
@@ -299,8 +299,8 @@ impl VM {
                 self.peek(0)
             )
         };
-        if let Obj::Instance { class, fields } = obj.deref() {
-            if let Some(field) = fields.get(name) {
+        if let Obj::Instance(instance) = obj.deref() {
+            if let Some(field) = instance.fields.get(name) {
                 self.pop();
                 self.push(field);
                 Ok(())
@@ -312,7 +312,7 @@ impl VM {
                     )],
                     "Undefined property {} on instance of {}",
                     name,
-                    class
+                    instance.class
                 )
             }
         } else {
@@ -341,8 +341,8 @@ impl VM {
                 self.peek(0)
             )
         };
-        if let Obj::Instance { class: _, fields } = obj.deref_mut() {
-            fields.insert(name, self.peek(0));
+        if let Obj::Instance(instance) = obj.deref_mut() {
+            instance.fields.insert(name, self.peek(0));
             let value = self.pop();
             self.pop();
             self.push(value);
@@ -530,9 +530,9 @@ impl VM {
                 Ok(())
             },
             Obj::Class(_) => unsafe {
-                let class = Obj::new_instance(obj);
-                let class = self.gc.alloc(class);
-                *self.stack_top.sub(arg_count as usize).sub(1) = Value::Obj(class);
+                let instance = Obj::Instance(Instance::new(obj));
+                let instance = self.gc.alloc(instance);
+                *self.stack_top.sub(arg_count as usize).sub(1) = Value::Obj(instance);
                 Ok(())
             },
             _ => miette::bail!(
