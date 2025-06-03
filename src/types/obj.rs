@@ -7,6 +7,7 @@ use super::string::LoxString;
 use super::value::Value;
 use super::Hashable;
 use crate::datastructures::hash_table::HashTable;
+use crate::types::class::Class;
 use crate::types::Hash;
 use crate::vm::VM;
 pub struct ObjStruct {
@@ -32,9 +33,7 @@ pub enum Obj {
         next: Option<ObjRef>,
         closed: Value,
     },
-    Class {
-        name: LoxString,
-    },
+    Class(Class),
     Instance {
         class: ObjRef,
         fields: HashTable,
@@ -64,6 +63,14 @@ impl Obj {
             panic!("Value is no String")
         }
     }
+
+    pub fn as_class(&self) -> &Class {
+        if let Obj::Class(class) = self {
+            class
+        } else {
+            panic!("Value is no Class")
+        }
+    }
 }
 
 impl Hashable for Obj {
@@ -79,7 +86,7 @@ impl Hashable for Obj {
             Obj::Upvalue {
                 location: value, ..
             } => unsafe { (**value).hash() },
-            Obj::Class { name } => name.hash(),
+            Obj::Class(class) => class.name().hash(),
             Obj::Instance { class, fields: _ } => class.hash(),
         }
     }
@@ -96,7 +103,7 @@ impl Display for Obj {
                 upvalues: _,
             } => write!(f, "closure over {}", function),
             Obj::Upvalue { location: _, .. } => write!(f, "upvalue"),
-            Obj::Class { name } => write!(f, "{}", name),
+            Obj::Class(class) => write!(f, "{}", class),
             Obj::Instance { class, fields: _ } => write!(f, "{} instance", class),
         }
     }
@@ -131,7 +138,7 @@ impl Debug for Obj {
                     .field("closed", &is_closed)
                     .finish()
             }
-            Self::Class { name } => f.debug_struct("Class").field("name", name).finish(),
+            Self::Class(class) => f.debug_tuple("Class").field(class).finish(),
             Self::Instance { class, fields } => f
                 .debug_struct("Instance")
                 .field("class", class)

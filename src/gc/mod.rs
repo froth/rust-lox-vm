@@ -114,7 +114,7 @@ impl Gc {
                 next: _,
                 closed,
             } => self.mark(closed),
-            Obj::Class { name: _ } => (),
+            Obj::Class(_class) => (),
             Obj::Instance { class, fields } => {
                 self.mark(class);
                 fields.mark(self);

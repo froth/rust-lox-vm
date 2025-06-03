@@ -9,7 +9,7 @@ use std::{
 };
 
 use callframe::CallFrame;
-use miette::{bail, LabeledSpan, NamedSource};
+use miette::{LabeledSpan, NamedSource};
 use tracing::debug;
 
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
     op::Op,
     parser::Parser,
     printer::{ConsolePrinter, Printer},
-    types::{obj::Obj, obj_ref::ObjRef, value::Value},
+    types::{class::Class, obj::Obj, obj_ref::ObjRef, value::Value},
 };
 
 const FRAMES_MAX: usize = 64;
@@ -362,7 +362,7 @@ impl VM {
     fn create_class(&mut self, index: u8) {
         let name = self.current_frame().chunk().constants[index as usize];
         let name = name.as_string();
-        let class = Obj::Class { name: name.clone() };
+        let class = Obj::Class(Class::new(name.clone()));
         let class = self.gc.alloc(class);
         self.push(Value::Obj(class));
     }
@@ -529,7 +529,7 @@ impl VM {
                 self.push(result);
                 Ok(())
             },
-            Obj::Class { name: _ } => unsafe {
+            Obj::Class(_) => unsafe {
                 let class = Obj::new_instance(obj);
                 let class = self.gc.alloc(class);
                 *self.stack_top.sub(arg_count as usize).sub(1) = Value::Obj(class);

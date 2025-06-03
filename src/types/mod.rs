@@ -1,3 +1,4 @@
+pub mod class;
 pub mod function;
 pub mod obj;
 pub mod obj_ref;
