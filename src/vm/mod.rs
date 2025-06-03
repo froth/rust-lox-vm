@@ -300,7 +300,7 @@ impl VM {
             )
         };
         if let Obj::Instance(instance) = obj.deref() {
-            if let Some(field) = instance.fields.get(name) {
+            if let Some(field) = instance.get_field(name) {
                 self.pop();
                 self.push(field);
                 Ok(())
@@ -312,7 +312,7 @@ impl VM {
                     )],
                     "Undefined property {} on instance of {}",
                     name,
-                    instance.class
+                    instance.class()
                 )
             }
         } else {
@@ -342,7 +342,7 @@ impl VM {
             )
         };
         if let Obj::Instance(instance) = obj.deref_mut() {
-            instance.fields.insert(name, self.peek(0));
+            instance.set_field(name, self.peek(0));
             let value = self.pop();
             self.pop();
             self.push(value);

@@ -3,13 +3,13 @@ use std::fmt::Display;
 use crate::{
     datastructures::hash_table::HashTable,
     gc::markable::Markable,
-    types::{obj_ref::ObjRef, Hashable},
+    types::{obj_ref::ObjRef, value::Value, Hashable},
 };
 
 #[derive(Debug)]
 pub struct Instance {
-    pub class: ObjRef,
-    pub fields: HashTable,
+    class: ObjRef,
+    fields: HashTable,
 }
 
 impl Instance {
@@ -18,6 +18,24 @@ impl Instance {
             class,
             fields: HashTable::new(),
         }
+    }
+
+    pub fn class(&self) -> ObjRef {
+        self.class
+    }
+
+    pub fn get_field(&self, name: Value) -> Option<Value> {
+        self.fields.get(name)
+    }
+
+    pub fn set_field(&mut self, name: Value, value: Value) {
+        self.fields.insert(name, value);
+    }
+}
+
+impl Hashable for Instance {
+    fn hash(&self) -> crate::types::Hash {
+        self.class.hash()
     }
 }
 
@@ -29,12 +47,6 @@ impl Markable for Instance {
 
     fn is_marked(&mut self) -> bool {
         unreachable!()
-    }
-}
-
-impl Hashable for Instance {
-    fn hash(&self) -> crate::types::Hash {
-        self.class.hash()
     }
 }
 
