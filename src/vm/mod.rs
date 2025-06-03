@@ -281,8 +281,18 @@ impl VM {
                     self.pop();
                 },
                 Op::Class(index) => self.create_class(index),
+                Op::Method(index) => self.define_method(index),
             }
         }
+    }
+
+    fn define_method(&mut self, index: u8) {
+        let name = self.current_frame().chunk().constants[index as usize];
+        let method = self.peek(0);
+        let mut peek = self.peek(1);
+        let class = peek.as_obj_mut().as_class();
+        class.add_method(name, method);
+        self.pop();
     }
 
     fn get_property(&mut self, index: u8) -> Result<(), miette::Error> {

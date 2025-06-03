@@ -23,6 +23,14 @@ impl Value {
         }
     }
 
+    pub fn as_obj_mut(&mut self) -> &mut ObjRef {
+        if let Value::Obj(obj) = self {
+            obj
+        } else {
+            panic!("Value is no Obj")
+        }
+    }
+
     pub fn as_string(&self) -> &LoxString {
         self.as_obj().deref().as_string()
     }

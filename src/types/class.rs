@@ -1,5 +1,7 @@
 use crate::{
-    datastructures::hash_table::HashTable, gc::markable::Markable, types::string::LoxString,
+    datastructures::hash_table::HashTable,
+    gc::markable::Markable,
+    types::{string::LoxString, value::Value},
 };
 use std::fmt::Display;
 
@@ -19,6 +21,10 @@ impl Class {
 
     pub fn name(&self) -> &LoxString {
         &self.name
+    }
+
+    pub fn add_method(&mut self, name: Value, method: Value) {
+        self.methods.insert(name, method);
     }
 }
 

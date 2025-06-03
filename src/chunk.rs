@@ -108,6 +108,7 @@ impl Chunk {
             | Op::GetGlobal(idx)
             | Op::SetGlobal(idx)
             | Op::Class(idx)
+            | Op::Method(idx)
             | Op::GetProperty(idx)
             | Op::SetProperty(idx) => {
                 let const_index: usize = (*idx).into();

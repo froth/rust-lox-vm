@@ -9,6 +9,7 @@ use tracing::debug;
 use crate::{
     compiler::{Compiler, FunctionType},
     gc::Gc,
+    match_token,
     op::Op,
     scanner::Scanner,
     token::{Token, TokenType},
@@ -126,5 +127,30 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             old.function_name.map(LoxString::string),
             old.upvalues,
         )
+    }
+
+    fn named_variable(&mut self, name: &str, can_assign: bool, location: SourceSpan) -> Result<()> {
+        let (get_op, set_op) = if let Some(resolved) = self.current.resolve_local(name) {
+            if !resolved.initialized {
+                miette::bail!(
+                    labels = vec![LabeledSpan::at(location, "here")],
+                    "Can't read local variable in its own initializer",
+                )
+            }
+            let slot = resolved.slot;
+            (Op::GetLocal(slot), Op::SetLocal(slot))
+        } else if let Some(upvalue_index) = self.current.resolve_upvalue(name) {
+            (Op::GetUpvalue(upvalue_index), Op::SetUpvalue(upvalue_index))
+        } else {
+            let arg = self.current.identifier_constant(self.gc.alloc(name));
+            (Op::GetGlobal(arg), Op::SetGlobal(arg))
+        };
+        if can_assign && match_token!(self.scanner, TokenType::Equal)?.is_some() {
+            self.expression()?;
+            self.current.chunk.write(set_op, location);
+        } else {
+            self.current.chunk.write(get_op, location);
+        }
+        Ok(())
     }
 }

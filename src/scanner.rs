@@ -108,6 +108,20 @@ impl<'a> Scanner<'a> {
         self.src.inner().as_str()[self.start..self.at].to_string()
     }
 
+    pub fn consume_identifier(&mut self, expected: &str) -> Result<(&'a str, SourceSpan)> {
+        let next = self.advance()?;
+        if let TokenType::Identifier(id) = next.token_type {
+            Ok((id, next.location))
+        } else {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(next.location, "here")],
+                "Expected {} but got `{}`",
+                expected,
+                next.token_type
+            )
+        }
+    }
+
     fn inner_advance(&mut self) -> Option<char> {
         if let Some(char) = self.rest.chars().next() {
             self.at += char.len_utf8();

@@ -54,7 +54,7 @@ impl Obj {
         }
     }
 
-    pub fn as_class(&self) -> &Class {
+    pub fn as_class(&mut self) -> &mut Class {
         if let Obj::Class(class) = self {
             class
         } else {
