@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
+use super::closure::Closure;
 use super::function::Function;
 use super::instance::Instance;
 use super::obj_ref::ObjRef;
@@ -24,10 +25,7 @@ pub enum Obj {
     String(LoxString),
     Function(Function),
     Native(fn(u8, *mut Value, &mut VM) -> Value),
-    Closure {
-        function: ObjRef,
-        upvalues: Vec<ObjRef>,
-    },
+    Closure(Closure),
     Upvalue {
         location: *mut Value,
         next: Option<ObjRef>,
@@ -61,6 +59,14 @@ impl Obj {
             panic!("Value is no Class")
         }
     }
+
+    pub fn as_closure(&self) -> &Closure {
+        if let Obj::Closure(closure) = self {
+            closure
+        } else {
+            panic!("Value is not a Closure")
+        }
+    }
 }
 
 impl Hashable for Obj {
@@ -69,10 +75,7 @@ impl Hashable for Obj {
             Obj::String(lox_string) => lox_string.hash(),
             Obj::Function(function) => function.hash(),
             Obj::Native(_) => Hash(11),
-            Obj::Closure {
-                function,
-                upvalues: _,
-            } => function.hash(),
+            Obj::Closure(closure) => closure.hash(),
             Obj::Upvalue {
                 location: value, ..
             } => unsafe { (**value).hash() },
@@ -88,10 +91,7 @@ impl Display for Obj {
             Obj::String(s) => write!(f, "{}", s.string),
             Obj::Function(function) => write!(f, "{}", function),
             Obj::Native(_) => write!(f, "<native fn>"),
-            Obj::Closure {
-                function,
-                upvalues: _,
-            } => write!(f, "closure over {}", function),
+            Obj::Closure(closure) => write!(f, "{}", closure),
             Obj::Upvalue { location: _, .. } => write!(f, "upvalue"),
             Obj::Class(class) => write!(f, "{}", class),
             Obj::Instance(instance) => write!(f, "{}", instance),
@@ -105,17 +105,7 @@ impl Debug for Obj {
             Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
             Self::Function(arg0) => f.debug_tuple("Function").field(arg0).finish(),
             Self::Native(arg0) => f.debug_tuple("Native").field(arg0).finish(),
-            Self::Closure { function, upvalues } => {
-                let function_name = if let Self::Function(f) = function.deref() {
-                    f.name().map(|n| n.string.clone())
-                } else {
-                    unreachable!()
-                };
-                f.debug_struct("Closure")
-                    .field("function", &function_name)
-                    .field("upvalues", upvalues)
-                    .finish()
-            }
+            Self::Closure(closure) => f.debug_tuple("Closure").field(closure).finish(),
             Self::Upvalue {
                 location,
                 next: _,

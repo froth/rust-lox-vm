@@ -1,4 +1,5 @@
 pub mod class;
+pub mod closure;
 pub mod function;
 pub mod instance;
 pub mod obj;

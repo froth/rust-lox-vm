@@ -105,9 +105,8 @@ impl Gc {
         match obj.deref_mut() {
             Obj::Native(_) | Obj::String(_) => (),
             Obj::Function(function) => self.mark(function),
-            Obj::Closure { function, upvalues } => {
-                self.mark(function);
-                upvalues.iter_mut().for_each(|u| self.mark(u));
+            Obj::Closure(closure) => {
+                self.mark(closure);
             }
             Obj::Upvalue {
                 location: _,

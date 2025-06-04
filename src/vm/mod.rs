@@ -19,7 +19,9 @@ use crate::{
     op::Op,
     parser::Parser,
     printer::{ConsolePrinter, Printer},
-    types::{class::Class, instance::Instance, obj::Obj, obj_ref::ObjRef, value::Value},
+    types::{
+        class::Class, closure::Closure, instance::Instance, obj::Obj, obj_ref::ObjRef, value::Value,
+    },
 };
 
 const FRAMES_MAX: usize = 64;
@@ -105,10 +107,7 @@ impl VM {
 
         let function = self.gc.alloc(function); // gc.alloc to prevent collection
         self.push(Value::Obj(function));
-        let closure = self.alloc(Obj::Closure {
-            function,
-            upvalues: vec![],
-        });
+        let closure = self.alloc(Obj::Closure(Closure::new(function, vec![])));
         self.pop();
         self.push(Value::Obj(closure));
 
@@ -417,10 +416,7 @@ impl VM {
                 }
             })
             .collect();
-        let closure = Obj::Closure {
-            function: *obj.as_obj(),
-            upvalues,
-        };
+        let closure = Obj::Closure(Closure::new(*obj.as_obj(), upvalues));
         let closure = self.alloc(closure);
         self.push(Value::Obj(closure));
     }
@@ -508,11 +504,8 @@ impl VM {
             )
         };
         match obj.deref() {
-            Obj::Closure {
-                function,
-                upvalues: _,
-            } => {
-                let function = function.as_function();
+            Obj::Closure(closure) => {
+                let function = closure.function.as_function();
                 if function.arity() != arg_count {
                     miette::bail!(
                         labels = vec![LabeledSpan::at(
