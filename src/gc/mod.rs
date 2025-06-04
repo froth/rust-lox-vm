@@ -115,6 +115,7 @@ impl Gc {
             } => self.mark(closed),
             Obj::Class(class) => self.mark(class),
             Obj::Instance(instance) => self.mark(instance),
+            Obj::BoundMethod(bound_method) => self.mark(bound_method),
         }
     }
 

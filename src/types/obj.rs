@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
+use super::bound_method::BoundMethod;
 use super::closure::Closure;
 use super::function::Function;
 use super::instance::Instance;
@@ -33,6 +34,7 @@ pub enum Obj {
     },
     Class(Class),
     Instance(Instance),
+    BoundMethod(BoundMethod),
 }
 
 impl Obj {
@@ -67,6 +69,14 @@ impl Obj {
             panic!("Value is not a Closure")
         }
     }
+
+    pub fn as_bound_method(&self) -> &BoundMethod {
+        if let Obj::BoundMethod(bound_method) = self {
+            bound_method
+        } else {
+            panic!("Value is not a BoundMethod")
+        }
+    }
 }
 
 impl Hashable for Obj {
@@ -81,6 +91,7 @@ impl Hashable for Obj {
             } => unsafe { (**value).hash() },
             Obj::Class(class) => class.name().hash(),
             Obj::Instance(instance) => instance.hash(),
+            Obj::BoundMethod(bound_method) => bound_method.hash(),
         }
     }
 }
@@ -95,6 +106,7 @@ impl Display for Obj {
             Obj::Upvalue { location: _, .. } => write!(f, "upvalue"),
             Obj::Class(class) => write!(f, "{}", class),
             Obj::Instance(instance) => write!(f, "{}", instance),
+            Obj::BoundMethod(bound_method) => write!(f, "{}", bound_method),
         }
     }
 }
@@ -103,9 +115,9 @@ impl Debug for Obj {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
-            Self::Function(arg0) => f.debug_tuple("Function").field(arg0).finish(),
+            Self::Function(function) => Debug::fmt(function, f),
             Self::Native(arg0) => f.debug_tuple("Native").field(arg0).finish(),
-            Self::Closure(closure) => f.debug_tuple("Closure").field(closure).finish(),
+            Self::Closure(closure) => Debug::fmt(closure, f),
             Self::Upvalue {
                 location,
                 next: _,
@@ -118,8 +130,9 @@ impl Debug for Obj {
                     .field("closed", &is_closed)
                     .finish()
             }
-            Self::Class(class) => f.debug_tuple("Class").field(class).finish(),
-            Self::Instance(instance) => f.debug_tuple("Instance").field(instance).finish(),
+            Self::Class(class) => Debug::fmt(class, f),
+            Self::Instance(instance) => Debug::fmt(instance, f),
+            Self::BoundMethod(bound_method) => Debug::fmt(bound_method, f),
         }
     }
 }

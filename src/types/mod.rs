@@ -1,3 +1,4 @@
+pub mod bound_method;
 pub mod class;
 pub mod closure;
 pub mod function;
