@@ -75,7 +75,12 @@ impl Parser<'_, '_> {
     fn method(&mut self) -> Result<()> {
         let (identifier, location) = self.scanner.consume_identifier("method name")?;
         let constant = self.current.identifier_constant(self.gc.alloc(identifier));
-        self.function(FunctionType::Method)?;
+        let function_type = if identifier == "init" {
+            FunctionType::Initializer
+        } else {
+            FunctionType::Method
+        };
+        self.function(function_type)?;
         self.current.chunk.write(Op::Method(constant), location);
         Ok(())
     }
@@ -214,9 +219,14 @@ impl Parser<'_, '_> {
             )
         }
         if match_token!(self.scanner, TokenType::Semicolon)?.is_some() {
-            self.current.chunk.write(Op::Nil, location);
-            self.current.chunk.write(Op::Return, location);
+            self.emit_return(location);
         } else {
+            if self.current.function_type == FunctionType::Initializer {
+                miette::bail!(
+                    labels = vec![LabeledSpan::at(location, "here")],
+                    "Can't return a value from an initializer.",
+                );
+            }
             self.expression()?;
             consume!(
                 self,

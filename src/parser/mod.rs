@@ -110,9 +110,17 @@ impl<'a, 'gc> Parser<'a, 'gc> {
         self.current.enclosing = Some(Box::new(old_compiler));
     }
 
-    pub fn end_compiler(&mut self, location: SourceSpan) -> Function {
-        self.current.chunk.write(Op::Nil, location);
+    fn emit_return(&mut self, location: SourceSpan) {
+        if self.current.function_type == FunctionType::Initializer {
+            self.current.chunk.write(Op::GetLocal(0), location);
+        } else {
+            self.current.chunk.write(Op::Nil, location);
+        }
         self.current.chunk.write(Op::Return, location);
+    }
+
+    pub fn end_compiler(&mut self, location: SourceSpan) -> Function {
+        self.emit_return(location);
         let arity = self.current.arity;
         let enclosing = self
             .current
