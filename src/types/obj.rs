@@ -84,6 +84,13 @@ impl Obj {
             panic!("Value is not a BoundMethod")
         }
     }
+    pub fn as_instance(&self) -> &Instance {
+        if let Obj::Instance(instance) = self {
+            instance
+        } else {
+            panic!("Value is no Instance")
+        }
+    }
 }
 
 impl Hashable for Obj {

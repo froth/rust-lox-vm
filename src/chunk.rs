@@ -152,6 +152,18 @@ impl Chunk {
                     }
                 }
             }
+            Op::Invoke {
+                property_index,
+                arg_count,
+            } => {
+                let const_index: usize = (*property_index).into();
+                let constant = self.constants[const_index];
+                write!(
+                    &mut result,
+                    "{:<16} ({} args){:<4} '{}'",
+                    op, arg_count, const_index, constant
+                )?;
+            }
             op => write!(&mut result, "{op}")?,
         }
         Ok((result, line_number))

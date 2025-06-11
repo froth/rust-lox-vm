@@ -285,6 +285,13 @@ impl VM {
                 },
                 Op::Class(index) => self.create_class(index),
                 Op::Method(index) => self.define_method(index),
+                Op::Invoke {
+                    property_index,
+                    arg_count,
+                } => {
+                    let constant = self.current_frame().chunk().constants[property_index as usize];
+                    self.invoke(constant, arg_count)?
+                }
             }
         }
     }
@@ -295,6 +302,60 @@ impl VM {
         let mut peek = self.peek(1);
         peek.as_class_mut().add_method(name, method);
         self.pop();
+    }
+
+    fn invoke(&mut self, name: Value, arg_count: u8) -> Result<(), miette::Error> {
+        let receiver = self.peek(arg_count);
+        if let Value::Obj(obj) = receiver {
+            if let Obj::Instance(instance) = obj.deref() {
+                if let Some(value) = instance.get_field(name) {
+                    unsafe { *(self.stack_top.sub(arg_count as usize).sub(1)) = value };
+                    self.call_value(value, arg_count)
+                } else {
+                    self.invoke_from_class(instance.class(), name, arg_count)
+                }
+            } else {
+                miette::bail!(
+                    labels = vec![LabeledSpan::at(
+                        self.current_frame().current_location(),
+                        "here"
+                    )],
+                    "Can only invoke methods on instances, not on {}",
+                    receiver
+                )
+            }
+        } else {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(
+                    self.current_frame().current_location(),
+                    "here"
+                )],
+                "Can only invoke methods on instances, not on {}",
+                receiver
+            )
+        }
+    }
+
+    fn invoke_from_class(
+        &mut self,
+        class: &Class,
+        name: Value,
+        arg_count: u8,
+    ) -> Result<(), miette::Error> {
+        let method = if let Some(method) = class.get_method(name) {
+            method
+        } else {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(
+                    self.current_frame().current_location(),
+                    "here"
+                )],
+                "Undefined property {} on class {}",
+                name,
+                class.name()
+            )
+        };
+        self.call(arg_count, *method.as_obj(), method.as_closure())
     }
 
     fn get_property(&mut self, index: u8) -> Result<(), miette::Error> {
