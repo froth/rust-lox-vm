@@ -7,6 +7,7 @@ use miette::{ByteOffset, Diagnostic, LabeledSpan, NamedSource, Report, Result, S
 use tracing::debug;
 
 use crate::{
+    class_compiler::ClassCompiler,
     compiler::{Compiler, FunctionType},
     gc::Gc,
     match_token,
@@ -22,6 +23,7 @@ pub struct Parser<'a, 'gc> {
     gc: &'gc mut Gc,
     errors: Vec<Report>,
     current: Compiler<'a>,
+    current_class: Option<Box<ClassCompiler>>,
     src: Arc<NamedSource<String>>,
 }
 
@@ -42,6 +44,7 @@ impl<'a, 'gc> Parser<'a, 'gc> {
             gc,
             errors: vec![],
             current: Compiler::new(FunctionType::Script, None, Arc::new(src.clone())),
+            current_class: None,
             src: Arc::new(src.clone()),
         }
     }

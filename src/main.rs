@@ -13,6 +13,7 @@ use vm::VM;
 
 mod args;
 mod chunk;
+mod class_compiler;
 mod compiler;
 mod datastructures;
 mod error;

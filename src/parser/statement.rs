@@ -3,6 +3,7 @@ use miette::{LabeledSpan, SourceSpan};
 use super::{Parser, Result};
 use crate::{
     check,
+    class_compiler::ClassCompiler,
     compiler::FunctionType,
     consume, match_token,
     op::Op,
@@ -40,6 +41,11 @@ impl Parser<'_, '_> {
             Some(const_idx)
         };
         self.current.define_variable(var_idx, location);
+
+        let new_compiler = Box::new(ClassCompiler::new());
+        let old_compiler = self.current_class.replace(new_compiler);
+        self.current_class.as_mut().unwrap().enclosing = old_compiler;
+
         self.named_variable(identifier, false, class_location)?;
         consume!(
             self,
@@ -56,13 +62,15 @@ impl Parser<'_, '_> {
             "Expected '}}; after class body"
         );
         self.current.chunk.write(Op::Pop, location);
+
+        self.current_class = self.current_class.as_mut().unwrap().enclosing.take();
         Ok(())
     }
 
     fn method(&mut self) -> Result<()> {
         let (identifier, location) = self.scanner.consume_identifier("method name")?;
         let constant = self.current.identifier_constant(self.gc.alloc(identifier));
-        self.function(FunctionType::Function)?;
+        self.function(FunctionType::Method)?;
         self.current.chunk.write(Op::Method(constant), location);
         Ok(())
     }

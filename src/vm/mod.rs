@@ -533,11 +533,16 @@ impl VM {
                 *self.stack_top.sub(arg_count as usize).sub(1) = Value::Obj(instance);
                 Ok(())
             },
-            Obj::BoundMethod(bound_method) => self.call(
-                arg_count,
-                bound_method.method(),
-                bound_method.method().as_closure(),
-            ),
+            Obj::BoundMethod(bound_method) => {
+                unsafe {
+                    *self.stack_top.sub(arg_count as usize).sub(1) = bound_method.receiver();
+                }
+                self.call(
+                    arg_count,
+                    bound_method.method(),
+                    bound_method.method().as_closure(),
+                )
+            }
             _ => miette::bail!(
                 labels = vec![LabeledSpan::at(
                     self.current_frame().current_location(),

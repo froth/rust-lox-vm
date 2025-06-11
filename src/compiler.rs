@@ -18,6 +18,8 @@ struct Local<'a> {
 pub enum FunctionType {
     Function,
     Script,
+    Method,
+    Initializer,
 }
 
 pub struct Compiler<'a> {
@@ -48,8 +50,16 @@ impl<'a> Compiler<'a> {
         function_name: Option<String>,
         src: Arc<NamedSource<String>>,
     ) -> Self {
+        let slot_zero_name = if matches!(
+            function_type,
+            FunctionType::Method | FunctionType::Initializer
+        ) {
+            "this"
+        } else {
+            ""
+        };
         let slot_zero = Local {
-            name: "",
+            name: slot_zero_name,
             depth: Some(0),
             is_captured: false,
         };
