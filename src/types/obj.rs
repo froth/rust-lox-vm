@@ -1,5 +1,4 @@
 use std::fmt::{Debug, Display};
-use std::ops::Deref;
 
 use super::bound_method::BoundMethod;
 use super::closure::Closure;
@@ -54,7 +53,15 @@ impl Obj {
         }
     }
 
-    pub fn as_class(&mut self) -> &mut Class {
+    pub fn as_class(&self) -> &Class {
+        if let Obj::Class(class) = self {
+            class
+        } else {
+            panic!("Value is no Class")
+        }
+    }
+
+    pub fn as_class_mut(&mut self) -> &mut Class {
         if let Obj::Class(class) = self {
             class
         } else {

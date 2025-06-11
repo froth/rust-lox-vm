@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display};
 
 use crate::{
     gc::{markable::Markable, Gc},
-    types::{closure::Closure, obj_ref::ObjRef, string::LoxString, value::Value, Hash, Hashable},
+    types::{obj_ref::ObjRef, value::Value, Hash, Hashable},
 };
 
 pub struct BoundMethod {
@@ -15,8 +15,8 @@ impl BoundMethod {
         Self { receiver, method }
     }
 
-    pub fn method(&self) -> &Closure {
-        self.method.as_closure()
+    pub fn method(&self) -> ObjRef {
+        self.method
     }
 }
 
@@ -55,6 +55,7 @@ impl Display for BoundMethod {
             f,
             "{}",
             self.method()
+                .as_closure()
                 .function
                 .as_function()
                 .name()

@@ -5,7 +5,7 @@ use miette::SourceSpan;
 use crate::{
     chunk::Chunk,
     op::Op,
-    types::{closure::Closure, function::Function, obj::Obj, obj_ref::ObjRef, value::Value},
+    types::{function::Function, obj::Obj, obj_ref::ObjRef, value::Value},
 };
 
 pub(super) struct CallFrame {

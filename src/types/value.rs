@@ -1,5 +1,7 @@
 use std::{fmt::Display, ops::Deref};
 
+use crate::types::class::Class;
+
 use super::{function::Function, obj_ref::ObjRef, string::LoxString, Hash, Hashable};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -37,6 +39,10 @@ impl Value {
 
     pub fn as_function(&self) -> &Function {
         self.as_obj().deref().as_function()
+    }
+
+    pub fn as_class_mut(&mut self) -> &mut Class {
+        self.as_obj_mut().as_class_mut()
     }
 }
 

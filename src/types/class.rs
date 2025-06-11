@@ -26,6 +26,10 @@ impl Class {
     pub fn add_method(&mut self, name: Value, method: Value) {
         self.methods.insert(name, method);
     }
+
+    pub fn get_method(&self, name: Value) -> Option<Value> {
+        self.methods.get(name)
+    }
 }
 
 impl Markable for Class {

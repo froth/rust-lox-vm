@@ -20,7 +20,8 @@ use crate::{
     parser::Parser,
     printer::{ConsolePrinter, Printer},
     types::{
-        class::Class, closure::Closure, instance::Instance, obj::Obj, obj_ref::ObjRef, value::Value,
+        bound_method::BoundMethod, class::Class, closure::Closure, instance::Instance, obj::Obj,
+        obj_ref::ObjRef, value::Value,
     },
 };
 
@@ -289,8 +290,7 @@ impl VM {
         let name = self.current_frame().chunk().constants[index as usize];
         let method = self.peek(0);
         let mut peek = self.peek(1);
-        let class = peek.as_obj_mut().as_class();
-        class.add_method(name, method);
+        peek.as_class_mut().add_method(name, method);
         self.pop();
     }
 
@@ -308,22 +308,8 @@ impl VM {
                 self.peek(0)
             )
         };
-        if let Obj::Instance(instance) = obj.deref() {
-            if let Some(field) = instance.get_field(name) {
-                self.pop();
-                self.push(field);
-                Ok(())
-            } else {
-                miette::bail!(
-                    labels = vec![LabeledSpan::at(
-                        self.current_frame().current_location(),
-                        "here"
-                    )],
-                    "Undefined property {} on instance of {}",
-                    name,
-                    instance.class()
-                )
-            }
+        let instance = if let Obj::Instance(instance) = obj.deref() {
+            instance
         } else {
             miette::bail!(
                 labels = vec![LabeledSpan::at(
@@ -331,8 +317,16 @@ impl VM {
                     "here"
                 )],
                 "Can only get properties on instances, not on {}",
-                self.peek(0)
+                obj
             )
+        };
+
+        if let Some(field) = instance.get_field(name) {
+            self.pop();
+            self.push(field);
+            Ok(())
+        } else {
+            self.bind_method(instance.class(), name)
         }
     }
 
@@ -366,6 +360,28 @@ impl VM {
                 self.peek(0)
             )
         }
+    }
+
+    fn bind_method(&mut self, class: &Class, name: Value) -> Result<(), miette::Error> {
+        let method = if let Some(method) = class.get_method(name) {
+            method
+        } else {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(
+                    self.current_frame().current_location(),
+                    "here"
+                )],
+                "Undefined property {} on class {}",
+                name,
+                class.name()
+            )
+        };
+
+        let bound_method = BoundMethod::new(self.peek(0), *method.as_obj());
+        let bound_method = self.gc.alloc(Obj::BoundMethod(bound_method));
+        self.pop();
+        self.push(Value::Obj(bound_method));
+        Ok(())
     }
 
     fn create_class(&mut self, index: u8) {
@@ -504,28 +520,7 @@ impl VM {
             )
         };
         match obj.deref() {
-            Obj::Closure(closure) => {
-                let function = closure.function.as_function();
-                if function.arity() != arg_count {
-                    miette::bail!(
-                        labels = vec![LabeledSpan::at(
-                            self.current_frame().current_location(),
-                            "here"
-                        )],
-                        "Expected {} arguments but got {}",
-                        function.arity(),
-                        arg_count
-                    )
-                }
-                unsafe {
-                    let frame = self.frames.add(self.frame_count);
-                    (*frame).closure = obj;
-                    (*frame).ip = function.chunk().code.ptr();
-                    (*frame).slots = self.stack_top.sub(arg_count as usize + 1);
-                }
-                self.frame_count += 1;
-                Ok(())
-            }
+            Obj::Closure(closure) => self.call(arg_count, obj, closure),
             Obj::Native(function) => unsafe {
                 let result = function(arg_count, self.stack_top.sub(arg_count as usize), self);
                 self.stack_top = self.stack_top.sub(arg_count as usize + 1);
@@ -538,6 +533,11 @@ impl VM {
                 *self.stack_top.sub(arg_count as usize).sub(1) = Value::Obj(instance);
                 Ok(())
             },
+            Obj::BoundMethod(bound_method) => self.call(
+                arg_count,
+                bound_method.method(),
+                bound_method.method().as_closure(),
+            ),
             _ => miette::bail!(
                 labels = vec![LabeledSpan::at(
                     self.current_frame().current_location(),
@@ -546,6 +546,29 @@ impl VM {
                 "Can only call closures or classes.",
             ),
         }
+    }
+
+    fn call(&mut self, arg_count: u8, obj: ObjRef, closure: &Closure) -> miette::Result<()> {
+        let function = closure.function.as_function();
+        if function.arity() != arg_count {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(
+                    self.current_frame().current_location(),
+                    "here"
+                )],
+                "Expected {} arguments but got {}",
+                function.arity(),
+                arg_count
+            )
+        }
+        unsafe {
+            let frame = self.frames.add(self.frame_count);
+            (*frame).closure = obj;
+            (*frame).ip = function.chunk().code.ptr();
+            (*frame).slots = self.stack_top.sub(arg_count as usize + 1);
+        }
+        self.frame_count += 1;
+        Ok(())
     }
 
     fn plus_operator(&mut self) -> miette::Result<()> {

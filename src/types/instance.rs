@@ -1,9 +1,9 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Deref};
 
 use crate::{
     datastructures::hash_table::HashTable,
     gc::markable::Markable,
-    types::{obj_ref::ObjRef, value::Value, Hashable},
+    types::{class::Class, obj_ref::ObjRef, value::Value, Hashable},
 };
 
 #[derive(Debug)]
@@ -20,8 +20,8 @@ impl Instance {
         }
     }
 
-    pub fn class(&self) -> ObjRef {
-        self.class
+    pub fn class(&self) -> &Class {
+        self.class.deref().as_class()
     }
 
     pub fn get_field(&self, name: Value) -> Option<Value> {
