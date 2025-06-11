@@ -1,0 +1,8 @@
+interpret
+fun f() {}
+fun t() {}
+----
+----
+
+----
+---- (no newline)

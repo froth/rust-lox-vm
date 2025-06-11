@@ -101,7 +101,7 @@ impl Parser<'_, '_> {
             TokenType::And => self.and(token.location),
             TokenType::Or => self.or(token.location),
             TokenType::LeftParen => self.call(token.location),
-            TokenType::Dot => self.get_set_expression(token.location, can_assign),
+            TokenType::Dot => self.dot(token.location, can_assign),
             _ => unreachable!(), // guarded by infix_precedence
         }
     }
@@ -116,7 +116,7 @@ impl Parser<'_, '_> {
         self.named_variable("this", false, location)
     }
 
-    fn get_set_expression(&mut self, location: SourceSpan, can_assign: bool) -> Result<()> {
+    fn dot(&mut self, location: SourceSpan, can_assign: bool) -> Result<()> {
         let (name, _) = self.scanner.consume_identifier("property after .")?;
 
         let constant_index = self.current.identifier_constant(self.gc.alloc(name));
@@ -126,6 +126,15 @@ impl Parser<'_, '_> {
             self.current
                 .chunk
                 .write(Op::SetProperty(constant_index), location);
+        } else if match_token!(self.scanner, TokenType::LeftParen)?.is_some() {
+            let arg_count = self.argument_list()?;
+            self.current.chunk.write(
+                Op::Invoke {
+                    property_index: constant_index,
+                    arg_count,
+                },
+                location,
+            );
         } else {
             self.current
                 .chunk

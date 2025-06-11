@@ -28,7 +28,7 @@ pub enum Op {
     SetUpvalue(u8),
     GetProperty(u8),
     SetProperty(u8),
-    JumpIfFalse(u16), // TODO: read op_codes and parameters separately to decreace opcode size? As in clox
+    JumpIfFalse(u16),
     Jump(u16),
     Loop(u16),
     Call(u8),
@@ -36,4 +36,5 @@ pub enum Op {
     CloseUpvalue,
     Class(u8),
     Method(u8),
+    Invoke { property_index: u8, arg_count: u8 },
 }

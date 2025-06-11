@@ -240,15 +240,15 @@ impl<'a> Scanner<'a> {
             's' if iter.as_str() == "uper" => TokenType::Super,
             'v' if iter.as_str() == "ar" => TokenType::Var,
             'w' if iter.as_str() == "hile" => TokenType::While,
-            'f' => match iter.next().expect("self.start + 1 outside of token") {
-                'a' if iter.as_str() == "lse" => TokenType::False,
-                'o' if iter.as_str() == "r" => TokenType::For,
-                'u' if iter.as_str() == "n" => TokenType::Fun,
+            'f' => match iter.next() {
+                Some('a') if iter.as_str() == "lse" => TokenType::False,
+                Some('o') if iter.as_str() == "r" => TokenType::For,
+                Some('u') if iter.as_str() == "n" => TokenType::Fun,
                 _ => TokenType::Identifier(text),
             },
-            't' => match iter.next().expect("self.start + 1 outside of token") {
-                'h' if iter.as_str() == "is" => TokenType::This,
-                'r' if iter.as_str() == "ue" => TokenType::True,
+            't' => match iter.next() {
+                Some('h') if iter.as_str() == "is" => TokenType::This,
+                Some('r') if iter.as_str() == "ue" => TokenType::True,
                 _ => TokenType::Identifier(text),
             },
             _ => TokenType::Identifier(text),

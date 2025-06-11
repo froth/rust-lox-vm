@@ -1,6 +1,6 @@
 use std::{fmt::Display, ops::Deref};
 
-use crate::types::{class::Class, closure::Closure};
+use crate::types::{class::Class, closure::Closure, instance::Instance};
 
 use super::{function::Function, obj_ref::ObjRef, string::LoxString, Hash, Hashable};
 
@@ -47,6 +47,10 @@ impl Value {
 
     pub fn as_class_mut(&mut self) -> &mut Class {
         self.as_obj_mut().as_class_mut()
+    }
+
+    pub fn as_instance(&self) -> &Instance {
+        self.as_obj().deref().as_instance()
     }
 }
 
