@@ -63,7 +63,12 @@ impl Parser<'_, '_> {
         );
         self.current.chunk.write(Op::Pop, location);
 
-        self.current_class = self.current_class.as_mut().unwrap().enclosing.take();
+        self.current_class = self
+            .current_class
+            .as_mut()
+            .expect("set above")
+            .enclosing
+            .take();
         Ok(())
     }
 
