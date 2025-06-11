@@ -69,6 +69,7 @@ impl Parser<'_, '_> {
                 self.current.emit_constant(Value::Obj(obj), token.location)
             }
             TokenType::Identifier(name) => self.named_variable(name, can_assign, token.location)?,
+            TokenType::This => self.this(token.location)?,
             _ => unreachable!(), // guarded by is_prefix TODO: benchmark unreachable_unsafe
         }
         Ok(())
@@ -103,6 +104,10 @@ impl Parser<'_, '_> {
             TokenType::Dot => self.get_set_expression(token.location, can_assign),
             _ => unreachable!(), // guarded by infix_precedence
         }
+    }
+
+    fn this(&mut self, location: SourceSpan) -> Result<()> {
+        self.named_variable("this", false, location)
     }
 
     fn get_set_expression(&mut self, location: SourceSpan, can_assign: bool) -> Result<()> {

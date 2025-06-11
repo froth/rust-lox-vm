@@ -62,7 +62,7 @@ impl Parser<'_, '_> {
     fn method(&mut self) -> Result<()> {
         let (identifier, location) = self.scanner.consume_identifier("method name")?;
         let constant = self.current.identifier_constant(self.gc.alloc(identifier));
-        self.function(FunctionType::Function)?;
+        self.function(FunctionType::Method)?;
         self.current.chunk.write(Op::Method(constant), location);
         Ok(())
     }

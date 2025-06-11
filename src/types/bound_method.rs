@@ -18,6 +18,10 @@ impl BoundMethod {
     pub fn method(&self) -> ObjRef {
         self.method
     }
+
+    pub fn receiver(&self) -> Value {
+        self.receiver
+    }
 }
 
 impl Markable for BoundMethod {
