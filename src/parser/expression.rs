@@ -107,6 +107,12 @@ impl Parser<'_, '_> {
     }
 
     fn this(&mut self, location: SourceSpan) -> Result<()> {
+        if self.current_class.is_none() {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(location, "here")],
+                "Can't use `this` outside of a class",
+            );
+        }
         self.named_variable("this", false, location)
     }
 

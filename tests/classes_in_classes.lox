@@ -1,0 +1,18 @@
+interpret
+class A {
+    method() {
+        class B{
+            method() {
+                print "B.method";
+            }
+        }
+        print "A.method";
+        var b = B();
+        b.method();
+    }
+}
+var a = A();
+a.method();
+----
+A.method
+B.method
