@@ -1,4 +1,8 @@
+pub mod bound_method;
+pub mod class;
+pub mod closure;
 pub mod function;
+pub mod instance;
 pub mod obj;
 pub mod obj_ref;
 pub mod string;

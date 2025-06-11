@@ -30,35 +30,41 @@ impl Parser<'_, '_> {
     }
 
     fn class_declaration(&mut self, location: SourceSpan) -> Result<()> {
-        let next = self.scanner.advance()?;
-        if let TokenType::Identifier(name) = next.token_type {
-            let const_idx = self.current.identifier_constant(self.gc.alloc(name));
-            self.current.declare_variable(name, location)?;
-            self.current.chunk.write(Op::Class(const_idx), location);
-            let var_idx = if self.current.is_local() {
-                None
-            } else {
-                Some(const_idx)
-            };
-            self.current.define_variable(var_idx, location);
-            consume!(
-                self,
-                TokenType::LeftBrace,
-                "Expected '{{' before class body"
-            );
-            consume!(
-                self,
-                TokenType::RightBrace,
-                "Expected '}}; after class body"
-            );
-            Ok(())
+        let (identifier, class_location) = self.scanner.consume_identifier("class name")?;
+        let const_idx = self.current.identifier_constant(self.gc.alloc(identifier));
+        self.current.declare_variable(identifier, location)?;
+        self.current.chunk.write(Op::Class(const_idx), location);
+        let var_idx = if self.current.is_local() {
+            None
         } else {
-            miette::bail!(
-                labels = vec![LabeledSpan::at(next.location, "here")],
-                "Expected variable name but got `{}`",
-                next.token_type
-            )
+            Some(const_idx)
+        };
+        self.current.define_variable(var_idx, location);
+        self.named_variable(identifier, false, class_location)?;
+        consume!(
+            self,
+            TokenType::LeftBrace,
+            "Expected '{{' before class body"
+        );
+        while (!check!(self.scanner, TokenType::RightBrace)) && self.scanner.peek().is_some() {
+            self.method()?;
         }
+
+        let location = consume!(
+            self,
+            TokenType::RightBrace,
+            "Expected '}}; after class body"
+        );
+        self.current.chunk.write(Op::Pop, location);
+        Ok(())
+    }
+
+    fn method(&mut self) -> Result<()> {
+        let (identifier, location) = self.scanner.consume_identifier("method name")?;
+        let constant = self.current.identifier_constant(self.gc.alloc(identifier));
+        self.function(FunctionType::Function)?;
+        self.current.chunk.write(Op::Method(constant), location);
+        Ok(())
     }
 
     fn var_declaration(&mut self, location: SourceSpan) -> Result<()> {
@@ -83,20 +89,12 @@ impl Parser<'_, '_> {
     }
 
     fn parse_variable(&mut self) -> Result<Option<u8>> {
-        let next = self.scanner.advance()?;
-        if let TokenType::Identifier(id) = next.token_type {
-            self.current.declare_variable(id, next.location)?;
-            if self.current.is_local() {
-                Ok(None)
-            } else {
-                Ok(Some(self.current.identifier_constant(self.gc.alloc(id))))
-            }
+        let (id, location) = self.scanner.consume_identifier("variable name")?;
+        self.current.declare_variable(id, location)?;
+        if self.current.is_local() {
+            Ok(None)
         } else {
-            miette::bail!(
-                labels = vec![LabeledSpan::at(next.location, "here")],
-                "Expected variable name but got `{}`",
-                next.token_type
-            )
+            Ok(Some(self.current.identifier_constant(self.gc.alloc(id))))
         }
     }
 

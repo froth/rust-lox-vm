@@ -35,4 +35,5 @@ pub enum Op {
     Closure(u8),
     CloseUpvalue,
     Class(u8),
+    Method(u8),
 }

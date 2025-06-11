@@ -1,12 +1,14 @@
 use std::fmt::{Debug, Display};
-use std::ops::Deref;
 
+use super::bound_method::BoundMethod;
+use super::closure::Closure;
 use super::function::Function;
+use super::instance::Instance;
 use super::obj_ref::ObjRef;
 use super::string::LoxString;
 use super::value::Value;
 use super::Hashable;
-use crate::datastructures::hash_table::HashTable;
+use crate::types::class::Class;
 use crate::types::Hash;
 use crate::vm::VM;
 pub struct ObjStruct {
@@ -23,32 +25,18 @@ pub enum Obj {
     String(LoxString),
     Function(Function),
     Native(fn(u8, *mut Value, &mut VM) -> Value),
-    Closure {
-        function: ObjRef,
-        upvalues: Vec<ObjRef>,
-    },
+    Closure(Closure),
     Upvalue {
         location: *mut Value,
         next: Option<ObjRef>,
         closed: Value,
     },
-    Class {
-        name: LoxString,
-    },
-    Instance {
-        class: ObjRef,
-        fields: HashTable,
-    },
+    Class(Class),
+    Instance(Instance),
+    BoundMethod(BoundMethod),
 }
 
 impl Obj {
-    pub fn new_instance(class: ObjRef) -> Self {
-        Self::Instance {
-            class,
-            fields: HashTable::new(),
-        }
-    }
-
     pub fn as_function(&self) -> &Function {
         if let Obj::Function(function) = self {
             function
@@ -64,6 +52,38 @@ impl Obj {
             panic!("Value is no String")
         }
     }
+
+    pub fn as_class(&self) -> &Class {
+        if let Obj::Class(class) = self {
+            class
+        } else {
+            panic!("Value is no Class")
+        }
+    }
+
+    pub fn as_class_mut(&mut self) -> &mut Class {
+        if let Obj::Class(class) = self {
+            class
+        } else {
+            panic!("Value is no Class")
+        }
+    }
+
+    pub fn as_closure(&self) -> &Closure {
+        if let Obj::Closure(closure) = self {
+            closure
+        } else {
+            panic!("Value is not a Closure")
+        }
+    }
+
+    pub fn as_bound_method(&self) -> &BoundMethod {
+        if let Obj::BoundMethod(bound_method) = self {
+            bound_method
+        } else {
+            panic!("Value is not a BoundMethod")
+        }
+    }
 }
 
 impl Hashable for Obj {
@@ -72,15 +92,13 @@ impl Hashable for Obj {
             Obj::String(lox_string) => lox_string.hash(),
             Obj::Function(function) => function.hash(),
             Obj::Native(_) => Hash(11),
-            Obj::Closure {
-                function,
-                upvalues: _,
-            } => function.hash(),
+            Obj::Closure(closure) => closure.hash(),
             Obj::Upvalue {
                 location: value, ..
             } => unsafe { (**value).hash() },
-            Obj::Class { name } => name.hash(),
-            Obj::Instance { class, fields: _ } => class.hash(),
+            Obj::Class(class) => class.name().hash(),
+            Obj::Instance(instance) => instance.hash(),
+            Obj::BoundMethod(bound_method) => bound_method.hash(),
         }
     }
 }
@@ -91,13 +109,11 @@ impl Display for Obj {
             Obj::String(s) => write!(f, "{}", s.string),
             Obj::Function(function) => write!(f, "{}", function),
             Obj::Native(_) => write!(f, "<native fn>"),
-            Obj::Closure {
-                function,
-                upvalues: _,
-            } => write!(f, "closure over {}", function),
+            Obj::Closure(closure) => write!(f, "{}", closure),
             Obj::Upvalue { location: _, .. } => write!(f, "upvalue"),
-            Obj::Class { name } => write!(f, "{}", name),
-            Obj::Instance { class, fields: _ } => write!(f, "{} instance", class),
+            Obj::Class(class) => write!(f, "{}", class),
+            Obj::Instance(instance) => write!(f, "{}", instance),
+            Obj::BoundMethod(bound_method) => write!(f, "{}", bound_method),
         }
     }
 }
@@ -106,19 +122,9 @@ impl Debug for Obj {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
-            Self::Function(arg0) => f.debug_tuple("Function").field(arg0).finish(),
+            Self::Function(function) => Debug::fmt(function, f),
             Self::Native(arg0) => f.debug_tuple("Native").field(arg0).finish(),
-            Self::Closure { function, upvalues } => {
-                let function_name = if let Self::Function(f) = function.deref() {
-                    f.name().map(|n| n.string.clone())
-                } else {
-                    unreachable!()
-                };
-                f.debug_struct("Closure")
-                    .field("function", &function_name)
-                    .field("upvalues", upvalues)
-                    .finish()
-            }
+            Self::Closure(closure) => Debug::fmt(closure, f),
             Self::Upvalue {
                 location,
                 next: _,
@@ -131,12 +137,9 @@ impl Debug for Obj {
                     .field("closed", &is_closed)
                     .finish()
             }
-            Self::Class { name } => f.debug_struct("Class").field("name", name).finish(),
-            Self::Instance { class, fields } => f
-                .debug_struct("Instance")
-                .field("class", class)
-                .field("fields", fields)
-                .finish(),
+            Self::Class(class) => Debug::fmt(class, f),
+            Self::Instance(instance) => Debug::fmt(instance, f),
+            Self::BoundMethod(bound_method) => Debug::fmt(bound_method, f),
         }
     }
 }

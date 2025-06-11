@@ -105,20 +105,17 @@ impl Gc {
         match obj.deref_mut() {
             Obj::Native(_) | Obj::String(_) => (),
             Obj::Function(function) => self.mark(function),
-            Obj::Closure { function, upvalues } => {
-                self.mark(function);
-                upvalues.iter_mut().for_each(|u| self.mark(u));
+            Obj::Closure(closure) => {
+                self.mark(closure);
             }
             Obj::Upvalue {
                 location: _,
                 next: _,
                 closed,
             } => self.mark(closed),
-            Obj::Class { name: _ } => (),
-            Obj::Instance { class, fields } => {
-                self.mark(class);
-                fields.mark(self);
-            }
+            Obj::Class(class) => self.mark(class),
+            Obj::Instance(instance) => self.mark(instance),
+            Obj::BoundMethod(bound_method) => self.mark(bound_method),
         }
     }
 

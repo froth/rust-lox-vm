@@ -16,12 +16,8 @@ pub(super) struct CallFrame {
 
 impl CallFrame {
     pub(super) fn function(&self) -> &Function {
-        if let Obj::Closure {
-            function,
-            upvalues: _,
-        } = self.closure.deref()
-        {
-            if let Obj::Function(function) = function.deref() {
+        if let Obj::Closure(closure) = self.closure.deref() {
+            if let Obj::Function(function) = closure.function.deref() {
                 return function;
             }
         }
@@ -29,12 +25,8 @@ impl CallFrame {
     }
 
     pub(super) fn upvalues(&self) -> &[ObjRef] {
-        if let Obj::Closure {
-            function: _,
-            upvalues,
-        } = self.closure.deref()
-        {
-            upvalues
+        if let Obj::Closure(closure) = self.closure.deref() {
+            &closure.upvalues
         } else {
             unreachable!("callframe stored non-closure")
         }
