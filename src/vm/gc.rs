@@ -60,5 +60,6 @@ impl VM {
         }
 
         self.globals.mark(&mut self.gc);
+        self.gc.mark(&mut self.init_string);
     }
 }

@@ -38,6 +38,7 @@ pub struct VM {
     printer: Box<dyn Printer>,
     sources: Vec<NamedSource<String>>,
     open_upvalues: Option<ObjRef>,
+    init_string: Value,
 }
 
 struct UpvalueLocation {
@@ -76,7 +77,8 @@ impl VM {
             unsafe { alloc::alloc(Layout::array::<Value>(STACK_MAX).unwrap()) as *mut Value };
         let frames =
             unsafe { alloc::alloc(Layout::array::<Value>(FRAMES_MAX).unwrap()) as *mut CallFrame };
-        let gc = Gc::new();
+        let mut gc = Gc::new();
+        let init_string = Value::Obj(gc.alloc("init"));
         let globals = HashTable::new();
         let mut vm = Self {
             stack,
@@ -88,6 +90,7 @@ impl VM {
             printer: Box::new(ConsolePrinter),
             sources: vec![],
             open_upvalues: None,
+            init_string,
         };
         vm.define_native_functions();
         vm
@@ -527,10 +530,22 @@ impl VM {
                 self.push(result);
                 Ok(())
             },
-            Obj::Class(_) => unsafe {
+            Obj::Class(class) => unsafe {
                 let instance = Obj::Instance(Instance::new(obj));
                 let instance = self.gc.alloc(instance);
                 *self.stack_top.sub(arg_count as usize).sub(1) = Value::Obj(instance);
+                if let Some(initializer) = class.get_method(self.init_string) {
+                    self.call(arg_count, *initializer.as_obj(), initializer.as_closure())?;
+                } else if arg_count > 0 {
+                    miette::bail!(
+                        labels = vec![LabeledSpan::at(
+                            self.current_frame().current_location(),
+                            "here"
+                        )],
+                        "Expected 0 arguments but got {}.",
+                        arg_count
+                    );
+                }
                 Ok(())
             },
             Obj::BoundMethod(bound_method) => {
