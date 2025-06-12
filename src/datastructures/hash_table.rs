@@ -94,7 +94,7 @@ impl HashTable {
     }
 
     fn find_entry(entries: NonNull<Entry>, capacity: u32, key: Value) -> *mut Entry {
-        let mut index: u32 = key.hash().0 % capacity;
+        let mut index: u32 = key.hash().0 & (capacity - 1);
         let mut tombstone = None;
         loop {
             // SAFETY: we know this ends in valid memory of HashTable
@@ -111,7 +111,7 @@ impl HashTable {
                     return tombstone.unwrap_or(entry);
                 }
             }
-            index = (index.wrapping_add(1)) % capacity
+            index = (index.wrapping_add(1)) & (capacity - 1)
         }
     }
 
@@ -120,7 +120,7 @@ impl HashTable {
         if self.count == 0 {
             return None;
         }
-        let mut index = hash_str(string).0 % self.capacity;
+        let mut index = hash_str(string).0 & (self.capacity - 1);
         loop {
             // SAFETY: we know this ends in valid memory of HashTable
             unsafe {
@@ -136,7 +136,7 @@ impl HashTable {
                     return None;
                 }
             }
-            index = (index.wrapping_add(1)) % self.capacity;
+            index = (index.wrapping_add(1)) & (self.capacity - 1);
         }
     }
 
