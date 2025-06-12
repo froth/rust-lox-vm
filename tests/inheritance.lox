@@ -7,16 +7,14 @@ class A {
     print "A.b";
   }
 }
-// class B < A {
-//   b() {
-//     print "B.b";
-//   }
-// }
-// var b = B();
-// b.a();
-// b.b();
+class B < A {
+  b() {
+    print "B.b";
+  }
+}
+var b = B();
+b.a();
+b.b();
 ----
-----
-
-----
----- (no newline)
+A.a
+B.b
