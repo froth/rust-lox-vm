@@ -105,6 +105,7 @@ impl TokenType<'_> {
                 | String(_)
                 | Identifier(_)
                 | This
+                | Super
         )
     }
 

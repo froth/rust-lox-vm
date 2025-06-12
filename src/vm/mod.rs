@@ -312,6 +312,12 @@ impl VM {
                         superclass
                     )
                 }
+                Op::GetSuper(index) => {
+                    let name = self.current_frame().chunk().constants[index as usize];
+                    let superclass = self.pop();
+                    let superclass = superclass.as_class();
+                    self.bind_method(superclass, name)?;
+                }
             }
         }
     }

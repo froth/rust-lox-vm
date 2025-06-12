@@ -48,6 +48,10 @@ impl Value {
     pub fn as_class_mut(&mut self) -> &mut Class {
         self.as_obj_mut().as_class_mut()
     }
+
+    pub fn as_class(&self) -> &Class {
+        self.as_obj().as_class()
+    }
 }
 
 impl Hashable for Value {

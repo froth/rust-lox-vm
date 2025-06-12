@@ -1,4 +1,4 @@
-use std::{num::NonZero, sync::Arc};
+use std::sync::Arc;
 
 use miette::{LabeledSpan, NamedSource, Result, SourceSpan};
 
