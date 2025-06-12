@@ -37,4 +37,6 @@ pub enum Op {
     Class(u8),
     Method(u8),
     Invoke { property_index: u8, arg_count: u8 },
+    Inherit,
+    GetSuper(u8),
 }

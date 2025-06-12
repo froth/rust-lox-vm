@@ -1,0 +1,20 @@
+interpret
+class A {
+  a() {
+    print "A.a";
+  }
+  b() {
+    print "A.b";
+  }
+}
+class B < A {
+  b() {
+    print "B.b";
+  }
+}
+var b = B();
+b.a();
+b.b();
+----
+A.a
+B.b

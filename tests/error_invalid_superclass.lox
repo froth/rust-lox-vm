@@ -1,0 +1,17 @@
+error
+var a = "asdad";
+class B < a {
+}
+----
+----
+{
+  "causes": [
+    "Superclass must be a class, not asdad"
+  ],
+  "labels": [],
+  "message": "Runtime Error",
+  "related": [],
+  "severity": "error"
+}
+----
+---- (no newline)

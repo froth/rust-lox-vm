@@ -70,6 +70,7 @@ impl Parser<'_, '_> {
             }
             TokenType::Identifier(name) => self.named_variable(name, can_assign, token.location)?,
             TokenType::This => self.this(token.location)?,
+            TokenType::Super => self._super(token.location)?,
             _ => unreachable!(), // guarded by is_prefix TODO: benchmark unreachable_unsafe
         }
         Ok(())
@@ -114,6 +115,31 @@ impl Parser<'_, '_> {
             );
         }
         self.named_variable("this", false, location)
+    }
+
+    fn _super(&mut self, location: SourceSpan) -> Result<()> {
+        if let Some(current_class) = self.current_class.as_ref() {
+            if !current_class.has_superclass {
+                miette::bail!(
+                    labels = vec![LabeledSpan::at(location, "here")],
+                    "Can't use `super` in a class with no superclass",
+                );
+            }
+        } else {
+            miette::bail!(
+                labels = vec![LabeledSpan::at(location, "here")],
+                "Can't use `super` outside of a class",
+            );
+        }
+        consume!(self.scanner, TokenType::Dot, "Expected '.' after 'super'");
+        let (name, _) = self.scanner.consume_identifier("superclass method name.")?;
+        let constant_index = self.current.identifier_constant(self.gc.alloc(name));
+        self.named_variable("this", false, location)?;
+        self.named_variable("super", false, location)?;
+        self.current
+            .chunk
+            .write(Op::GetSuper(constant_index), location);
+        Ok(())
     }
 
     fn dot(&mut self, location: SourceSpan, can_assign: bool) -> Result<()> {

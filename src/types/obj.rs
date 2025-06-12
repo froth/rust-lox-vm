@@ -76,21 +76,6 @@ impl Obj {
             panic!("Value is not a Closure")
         }
     }
-
-    pub fn as_bound_method(&self) -> &BoundMethod {
-        if let Obj::BoundMethod(bound_method) = self {
-            bound_method
-        } else {
-            panic!("Value is not a BoundMethod")
-        }
-    }
-    pub fn as_instance(&self) -> &Instance {
-        if let Obj::Instance(instance) = self {
-            instance
-        } else {
-            panic!("Value is no Instance")
-        }
-    }
 }
 
 impl Hashable for Obj {

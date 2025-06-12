@@ -31,9 +31,9 @@ impl Parser<'_, '_> {
     }
 
     fn class_declaration(&mut self, location: SourceSpan) -> Result<()> {
-        let (identifier, class_location) = self.scanner.consume_identifier("class name")?;
-        let const_idx = self.current.identifier_constant(self.gc.alloc(identifier));
-        self.current.declare_variable(identifier, location)?;
+        let (class_name, class_location) = self.scanner.consume_identifier("class name")?;
+        let const_idx = self.current.identifier_constant(self.gc.alloc(class_name));
+        self.current.declare_variable(class_name, location)?;
         self.current.chunk.write(Op::Class(const_idx), location);
         let var_idx = if self.current.is_local() {
             None
@@ -44,9 +44,26 @@ impl Parser<'_, '_> {
 
         let new_compiler = Box::new(ClassCompiler::new());
         let old_compiler = self.current_class.replace(new_compiler);
-        self.current_class.as_mut().unwrap().enclosing = old_compiler;
+        self.current_class
+            .as_mut()
+            .expect("defined above")
+            .enclosing = old_compiler;
 
-        self.named_variable(identifier, false, class_location)?;
+        if match_token!(self.scanner, TokenType::Less)?.is_some() {
+            let (super_name, location) = self.scanner.consume_identifier("Class name")?;
+            self.named_variable(super_name, false, location)?;
+            self.current.begin_scope();
+            self.current.add_local("super", location)?;
+            self.current.define_variable(None, location);
+            self.named_variable(class_name, false, location)?;
+            self.current.chunk.write(Op::Inherit, location);
+            self.current_class
+                .as_mut()
+                .expect("defined above")
+                .has_superclass = true;
+        }
+
+        self.named_variable(class_name, false, class_location)?;
         consume!(
             self,
             TokenType::LeftBrace,
@@ -62,6 +79,13 @@ impl Parser<'_, '_> {
             "Expected '}}; after class body"
         );
         self.current.chunk.write(Op::Pop, location);
+        if self
+            .current_class
+            .as_ref()
+            .is_some_and(|f| f.has_superclass)
+        {
+            self.current.end_scope(location);
+        }
 
         self.current_class = self
             .current_class

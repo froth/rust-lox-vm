@@ -110,7 +110,8 @@ impl Chunk {
             | Op::Class(idx)
             | Op::Method(idx)
             | Op::GetProperty(idx)
-            | Op::SetProperty(idx) => {
+            | Op::SetProperty(idx)
+            | Op::GetSuper(idx) => {
                 let const_index: usize = (*idx).into();
                 let constant = self.constants[const_index];
                 write!(&mut result, "{:<16} {:<4} '{}'", op, const_index, constant)?;
