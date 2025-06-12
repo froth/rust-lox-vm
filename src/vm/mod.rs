@@ -292,6 +292,26 @@ impl VM {
                     let constant = self.current_frame().chunk().constants[property_index as usize];
                     self.invoke(constant, arg_count)?
                 }
+                Op::Inherit => {
+                    let superclass = self.peek(1);
+                    if let Value::Obj(obj) = superclass {
+                        if let Obj::Class(superclass) = obj.deref() {
+                            let mut peek = self.peek(0);
+                            let subclass = peek.as_class_mut();
+                            subclass.copy_methods(superclass);
+                            self.pop(); // pop subclass
+                            continue;
+                        }
+                    }
+                    miette::bail!(
+                        labels = vec![LabeledSpan::at(
+                            self.current_frame().current_location(),
+                            "here"
+                        )],
+                        "Superclass must be a class, not {}",
+                        superclass
+                    )
+                }
             }
         }
     }

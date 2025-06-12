@@ -30,6 +30,10 @@ impl Class {
     pub fn get_method(&self, name: Value) -> Option<Value> {
         self.methods.get(name)
     }
+
+    pub fn copy_methods(&mut self, superclass: &Class) {
+        self.methods.add_all(&superclass.methods);
+    }
 }
 
 impl Markable for Class {
