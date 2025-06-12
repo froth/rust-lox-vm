@@ -156,6 +156,10 @@ impl Chunk {
             Op::Invoke {
                 property_index,
                 arg_count,
+            }
+            | Op::SuperInvoke {
+                property_index,
+                arg_count,
             } => {
                 let const_index: usize = (*property_index).into();
                 let constant = self.constants[const_index];
