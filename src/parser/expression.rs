@@ -135,10 +135,22 @@ impl Parser<'_, '_> {
         let (name, _) = self.scanner.consume_identifier("superclass method name.")?;
         let constant_index = self.current.identifier_constant(self.gc.alloc(name));
         self.named_variable("this", false, location)?;
-        self.named_variable("super", false, location)?;
-        self.current
-            .chunk
-            .write(Op::GetSuper(constant_index), location);
+        if match_token!(self.scanner, TokenType::LeftParen)?.is_some() {
+            let arg_count = self.argument_list()?;
+            self.named_variable("super", false, location)?;
+            self.current.chunk.write(
+                Op::SuperInvoke {
+                    property_index: constant_index,
+                    arg_count,
+                },
+                location,
+            );
+        } else {
+            self.named_variable("super", false, location)?;
+            self.current
+                .chunk
+                .write(Op::GetSuper(constant_index), location);
+        }
         Ok(())
     }
 

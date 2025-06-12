@@ -292,6 +292,13 @@ impl VM {
                     let constant = self.current_frame().chunk().constants[property_index as usize];
                     self.invoke(constant, arg_count)?
                 }
+                Op::SuperInvoke {
+                    property_index,
+                    arg_count,
+                } => {
+                    let constant = self.current_frame().chunk().constants[property_index as usize];
+                    self.super_invoke(constant, arg_count)?
+                }
                 Op::Inherit => {
                     let superclass = self.peek(1);
                     if let Value::Obj(obj) = superclass {
@@ -330,6 +337,11 @@ impl VM {
         self.pop();
     }
 
+    fn super_invoke(&mut self, name: Value, arg_count: u8) -> Result<(), miette::Error> {
+        let super_class = self.pop();
+        let super_class = super_class.as_class();
+        self.invoke_from_class(super_class, name, arg_count)
+    }
     fn invoke(&mut self, name: Value, arg_count: u8) -> Result<(), miette::Error> {
         let receiver = self.peek(arg_count);
         if let Value::Obj(obj) = receiver {

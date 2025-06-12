@@ -1,0 +1,16 @@
+interpret
+class A {
+  method() {
+    print "A";
+  }
+}
+
+class B < A {
+  method() {
+    super.method();
+  }
+}
+var b = B();
+b.method();
+----
+A
